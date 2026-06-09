@@ -4,6 +4,8 @@ Reveal ASCII art as a progress indicator, from Python. Same engine as the Rust c
 exposed as a tiny extension built with [PyO3](https://pyo3.rs). It installs as
 `inkling-loader` and imports as `inkling`.
 
+![inkling](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
+
 ```sh
 pip install inkling-loader
 ```

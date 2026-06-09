@@ -72,14 +72,14 @@ dependencies = [
 
 [[package]]
 name = "inkling-loader"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "crossterm",
 ]
 
 [[package]]
 name = "inkling-py"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "inkling-loader",
  "pyo3",

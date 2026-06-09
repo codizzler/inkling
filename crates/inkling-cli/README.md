@@ -4,6 +4,8 @@ The `inkling` command line tool: pipe progress in, watch ASCII art reveal. It is
 language-agnostic bridge to [inkling](https://github.com/codizzler/inkling), the way you
 would pipe to `pv`, with no bindings to link against.
 
+![inkling](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
+
 ```sh
 cargo install inkling-cli      # installs the `inkling` binary
 ```

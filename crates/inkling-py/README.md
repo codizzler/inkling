@@ -1,10 +1,11 @@
 # inkling (Python)
 
 Reveal ASCII art as a progress indicator, from Python. Same engine as the Rust crate,
-exposed as a tiny extension built with [PyO3](https://pyo3.rs).
+exposed as a tiny extension built with [PyO3](https://pyo3.rs). It installs as
+`inkling-loader` and imports as `inkling`.
 
 ```sh
-pip install inkling
+pip install inkling-loader
 ```
 
 Determinate, like `tqdm` but the bar is a drawing:

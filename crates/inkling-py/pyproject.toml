@@ -3,7 +3,7 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "inkling"
+name = "inkling-loader"
 description = "Reveal ASCII art as a progress indicator."
 readme = "README.md"
 license = { text = "MIT" }

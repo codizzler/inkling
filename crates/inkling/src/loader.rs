@@ -24,10 +24,10 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crossterm::{
-    cursor::{Hide, MoveToNextLine, MoveToPreviousLine, Show},
+    cursor::{Hide, MoveTo, MoveToColumn, MoveToNextLine, MoveToPreviousLine, Show},
     execute, queue,
     style::{Color, Print, ResetColor, SetForegroundColor},
-    terminal::{self, Clear, ClearType},
+    terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 use crate::art::Art;
@@ -369,13 +369,28 @@ impl<R: Read> Read for ProgressReader<R> {
 }
 
 // ---------------------------------------------------------------------------
-// The render thread: an inline, in-place reveal at ~30 fps.
+// The render thread: a reveal at ~30 fps in the alternate screen.
 // ---------------------------------------------------------------------------
 
 fn run(shared: Arc<Shared>) {
     let mut out = io::stdout();
-    let _ = execute!(out, Hide); // also enables VT processing on Windows
-    let lines = shared.art.height() + 1; // art rows plus one caption row
+    let (w, h) = (shared.art.width(), shared.art.height());
+    let rows = terminal::size().map(|(_, r)| r).unwrap_or(0);
+    // Animate inline while the picture and its caption fit the viewport, which keeps
+    // the reveal in the flow of the terminal and lets the next output follow below it.
+    // Only when the art is taller than the screen do we fall back to the alternate
+    // screen, where it cannot scroll and duplicate itself.
+    let fullscreen = rows < h + 2;
+
+    let (ox, oy) = if fullscreen {
+        let (cols, vr) = terminal::size().unwrap_or((w, h + 2));
+        let _ = execute!(out, EnterAlternateScreen, Hide, Clear(ClearType::All));
+        (cols.saturating_sub(w) / 2, vr.saturating_sub(h + 1) / 2)
+    } else {
+        let _ = execute!(out, Hide);
+        (0, 0)
+    };
+
     let frame = Duration::from_millis(1000 / FPS);
     let start = Instant::now();
     let mut displayed = 0.0f32;
@@ -386,26 +401,36 @@ fn run(shared: Arc<Shared>) {
         let total = shared.total.load(Relaxed);
         let pos = shared.pos.load(Relaxed);
         let t = start.elapsed().as_secs_f32();
-
         let target = if total == 0 {
-            // Spinner: a smooth breathing reveal between 10% and 100%.
-            0.1 + 0.9 * (0.5 - 0.5 * (t * 1.5).cos())
+            0.1 + 0.9 * (0.5 - 0.5 * (t * 1.5).cos()) // spinner: a breathing reveal
         } else {
             (pos as f32 / total as f32).clamp(0.0, 1.0)
         };
         displayed += (target - displayed) * 0.3; // glide toward the true value
         let progress = if finishing { 1.0 } else { displayed };
 
-        let drawn = if finishing && shared.state.load(Relaxed) == FINISH_CLEAR {
-            clear_block(&mut out, lines, first)
+        let _ = if fullscreen {
+            draw_frame(&mut out, &shared, ox, oy, progress, t)
         } else {
-            draw_frame(&mut out, &shared, progress, t, first)
+            draw_inline(&mut out, &shared, progress, t, first)
         };
-        let _ = drawn;
         first = false;
 
         if finishing {
-            let _ = execute!(out, Show);
+            let cleared = shared.state.load(Relaxed) == FINISH_CLEAR;
+            if fullscreen {
+                let _ = execute!(out, ResetColor, Show, LeaveAlternateScreen);
+                if !cleared {
+                    let _ = persist_final(&mut out, &shared);
+                }
+            } else if cleared {
+                let _ = clear_inline(&mut out, h + 1);
+                let _ = execute!(out, Show);
+            } else {
+                // Leave the finished art in place and park the cursor below it.
+                let _ = queue!(out, Print("\r\n"));
+                let _ = execute!(out, Show);
+            }
             let _ = out.flush();
             break;
         }
@@ -416,6 +441,81 @@ fn run(shared: Arc<Shared>) {
 fn draw_frame(
     out: &mut io::Stdout,
     shared: &Shared,
+    ox: u16,
+    oy: u16,
+    progress: f32,
+    t: f32,
+) -> io::Result<()> {
+    let art = &shared.art;
+    let (w, h) = (art.width(), art.height());
+    let style = &shared.style;
+
+    for y in 0..h {
+        queue!(out, MoveTo(ox, oy + y))?;
+        let mut last: Option<(u8, u8, u8)> = None;
+        for x in 0..w {
+            match shared.ranks.rank_at(x, y) {
+                Some(r) if r <= progress => {
+                    if style.color {
+                        let c = crate::render::cell_rgb(style, progress, r, x, y, t);
+                        if last != Some(c) {
+                            queue!(
+                                out,
+                                SetForegroundColor(Color::Rgb {
+                                    r: c.0,
+                                    g: c.1,
+                                    b: c.2
+                                })
+                            )?;
+                            last = Some(c);
+                        }
+                    }
+                    queue!(out, Print(art.glyph(x, y)))?;
+                }
+                _ => {
+                    if last.take().is_some() {
+                        queue!(out, ResetColor)?;
+                    }
+                    queue!(out, Print(' '))?;
+                }
+            }
+        }
+        if last.is_some() {
+            queue!(out, ResetColor)?;
+        }
+    }
+
+    // Caption row beneath the art.
+    queue!(out, MoveTo(ox, oy + h), Clear(ClearType::CurrentLine))?;
+    let msg = shared
+        .message
+        .lock()
+        .ok()
+        .map(|m| m.clone())
+        .unwrap_or_default();
+    if !msg.is_empty() {
+        let cols = terminal::size().map(|(c, _)| c).unwrap_or(80);
+        let shown: String = msg.chars().take(cols.saturating_sub(1) as usize).collect();
+        if style.color {
+            queue!(
+                out,
+                SetForegroundColor(Color::Rgb {
+                    r: 120,
+                    g: 134,
+                    b: 168
+                })
+            )?;
+        }
+        queue!(out, Print(shown), ResetColor)?;
+    }
+    out.flush()
+}
+
+// Inline reveal: draw the block in place and keep the cursor on its last line so the
+// next frame can step back up to it. The next program output then flows in below.
+fn draw_inline(
+    out: &mut io::Stdout,
+    shared: &Shared,
     progress: f32,
     t: f32,
     first: bool,
@@ -423,13 +523,12 @@ fn draw_frame(
     let art = &shared.art;
     let (w, h) = (art.width(), art.height());
     let style = &shared.style;
-    let cols = terminal::size().map(|(c, _)| c).unwrap_or(80);
 
     if !first {
-        queue!(out, MoveToPreviousLine(h + 1))?;
+        queue!(out, MoveToPreviousLine(h))?;
     }
     for y in 0..h {
-        queue!(out, Clear(ClearType::CurrentLine))?;
+        queue!(out, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
         let mut last: Option<(u8, u8, u8)> = None;
         for x in 0..w {
             match shared.ranks.rank_at(x, y) {
@@ -464,8 +563,8 @@ fn draw_frame(
         queue!(out, MoveToNextLine(1))?;
     }
 
-    // Caption row.
-    queue!(out, Clear(ClearType::CurrentLine))?;
+    // Caption line; leave the cursor here for the next frame to step back up to.
+    queue!(out, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
     let msg = shared
         .message
         .lock()
@@ -473,6 +572,7 @@ fn draw_frame(
         .map(|m| m.clone())
         .unwrap_or_default();
     if !msg.is_empty() {
+        let cols = terminal::size().map(|(c, _)| c).unwrap_or(80);
         let shown: String = msg.chars().take(cols.saturating_sub(1) as usize).collect();
         if style.color {
             queue!(
@@ -484,23 +584,72 @@ fn draw_frame(
                 })
             )?;
         }
-        queue!(out, Print(shown))?;
-        if style.color {
-            queue!(out, ResetColor)?;
-        }
+        queue!(out, Print(shown), ResetColor)?;
     }
-    queue!(out, MoveToNextLine(1))?;
     out.flush()
 }
 
-fn clear_block(out: &mut io::Stdout, lines: u16, first: bool) -> io::Result<()> {
-    if !first {
-        queue!(out, MoveToPreviousLine(lines))?;
-    }
+// Erase an inline block (the cursor is on its last line) and park it at the top.
+fn clear_inline(out: &mut io::Stdout, lines: u16) -> io::Result<()> {
+    queue!(out, MoveToPreviousLine(lines - 1))?;
     for _ in 0..lines {
-        queue!(out, Clear(ClearType::CurrentLine), MoveToNextLine(1))?;
+        queue!(
+            out,
+            MoveToColumn(0),
+            Clear(ClearType::CurrentLine),
+            MoveToNextLine(1)
+        )?;
     }
     queue!(out, MoveToPreviousLine(lines))?;
+    out.flush()
+}
+
+// Print the finished art, coloured and trimmed, into the normal buffer so it stays.
+fn persist_final(out: &mut io::Stdout, shared: &Shared) -> io::Result<()> {
+    let art = &shared.art;
+    let (w, h) = (art.width(), art.height());
+    let style = &shared.style;
+    for y in 0..h {
+        let mut last_ink = 0u16;
+        let mut any = false;
+        for x in 0..w {
+            if art.is_ink(x, y) {
+                last_ink = x;
+                any = true;
+            }
+        }
+        if any {
+            let mut last: Option<(u8, u8, u8)> = None;
+            for x in 0..=last_ink {
+                if art.is_ink(x, y) {
+                    if style.color {
+                        let c = crate::render::cell_rgb(style, 1.0, 0.0, x, y, 0.0);
+                        if last != Some(c) {
+                            queue!(
+                                out,
+                                SetForegroundColor(Color::Rgb {
+                                    r: c.0,
+                                    g: c.1,
+                                    b: c.2
+                                })
+                            )?;
+                            last = Some(c);
+                        }
+                    }
+                    queue!(out, Print(art.glyph(x, y)))?;
+                } else {
+                    if last.take().is_some() {
+                        queue!(out, ResetColor)?;
+                    }
+                    queue!(out, Print(' '))?;
+                }
+            }
+            if last.is_some() {
+                queue!(out, ResetColor)?;
+            }
+        }
+        queue!(out, Print("\r\n"))?;
+    }
     out.flush()
 }
 

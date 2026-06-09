@@ -1,3 +1,7 @@
-/target
+# Rust build output, at the root and in the nested inkling-py workspace.
+target/
 **/*.rs.bk
 *.pdb
+
+# VHS recording scripts are local scaffolding; only the rendered GIFs are tracked.
+*.tape

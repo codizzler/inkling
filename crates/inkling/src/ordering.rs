@@ -38,6 +38,87 @@ impl Ordering for Scanline {
 }
 
 // ---------------------------------------------------------------------------
+// Directional, a clean wipe along one axis.
+// ---------------------------------------------------------------------------
+
+/// The direction a [`Directional`] reveal sweeps.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Direction {
+    /// Row by row from the top. Good for tall art. (default)
+    #[default]
+    TopToBottom,
+    /// Row by row from the bottom.
+    BottomToTop,
+    /// Column by column from the left.
+    LeftToRight,
+    /// Column by column from the right.
+    RightToLeft,
+    /// Top to bottom unless the art reads much wider than tall. The smart default.
+    Auto,
+}
+
+/// Reveal the art as a clean directional wipe, ranking each cell by its position
+/// along one axis. Predictable and intuitive: a tall dragon paints from the top, a
+/// wide serpent from the left, and nothing shows until the wipe reaches it. This is
+/// the [`Loader`](crate::Loader) default.
+#[derive(Clone, Copy, Debug)]
+pub struct Directional(pub Direction);
+
+impl Default for Directional {
+    /// `Auto`: top to bottom unless the art reads much wider than it is tall.
+    fn default() -> Self {
+        Directional(Direction::Auto)
+    }
+}
+
+impl Directional {
+    /// Left to right, or right to left under a right-to-left locale (read from
+    /// `LC_ALL` or `LANG`), so the wipe follows the reader's eye.
+    pub fn reading() -> Self {
+        let rtl = std::env::var("LC_ALL")
+            .or_else(|_| std::env::var("LANG"))
+            .map(|l| {
+                let l = l.to_ascii_lowercase();
+                ["ar", "he", "fa", "ur"].iter().any(|p| l.starts_with(p))
+            })
+            .unwrap_or(false);
+        Directional(if rtl {
+            Direction::RightToLeft
+        } else {
+            Direction::LeftToRight
+        })
+    }
+}
+
+impl Ordering for Directional {
+    fn rank(&self, art: &Art) -> RankMap {
+        let (w, h) = (art.width(), art.height());
+        // Terminal cells are about twice as tall as they are wide, so art with
+        // more columns than rows can still read as a tall image. Only wipe
+        // sideways when it is genuinely wide, more than twice as many columns as
+        // rows; otherwise paint top to bottom, which is the intuitive read.
+        let dir = match self.0 {
+            Direction::Auto if w as u32 > 2 * h as u32 => Direction::LeftToRight,
+            Direction::Auto => Direction::TopToBottom,
+            other => other,
+        };
+        let dx = w.saturating_sub(1).max(1) as f32;
+        let dy = h.saturating_sub(1).max(1) as f32;
+        let mut map = RankMap::new(w, h);
+        for cell in art.ink_cells() {
+            let rank = match dir {
+                Direction::BottomToTop => (h - 1 - cell.y) as f32 / dy,
+                Direction::LeftToRight => cell.x as f32 / dx,
+                Direction::RightToLeft => (w - 1 - cell.x) as f32 / dx,
+                _ => cell.y as f32 / dy, // TopToBottom
+            };
+            map.set(cell.x, cell.y, rank);
+        }
+        map
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Geodesic, trace the spine and reveal along it.
 // ---------------------------------------------------------------------------
 
@@ -320,5 +401,37 @@ mod tests {
         let report = Geodesic::default().diagnose(&Art::parse("==========    ."));
         assert_eq!(report.ink_cells, 11);
         assert_eq!(report.connected_cells, 10); // the bar; the '.' is an island
+    }
+
+    /// `Auto` weights for terminal cells being about twice as tall as wide: art
+    /// that is wider than tall in cells but reads tall still paints top to bottom;
+    /// only genuinely wide art wipes sideways.
+    #[test]
+    fn directional_auto_accounts_for_cell_aspect() {
+        // 5 wide by 4 tall: more columns than rows, yet reads tall -> top to bottom.
+        let tall = Art::parse("#####\n#####\n#####\n#####");
+        let r = Directional(Direction::Auto).rank(&tall);
+        assert!(
+            r.rank_at(0, 0).unwrap() < r.rank_at(0, 3).unwrap(),
+            "top first"
+        );
+        assert_eq!(
+            r.rank_at(0, 0),
+            r.rank_at(4, 0),
+            "same row reveals together"
+        );
+
+        // 10 wide by 2 tall: genuinely wide -> left to right.
+        let wide = Art::parse("##########\n##########");
+        let rw = Directional(Direction::Auto).rank(&wide);
+        assert!(
+            rw.rank_at(0, 0).unwrap() < rw.rank_at(9, 0).unwrap(),
+            "left first"
+        );
+        assert_eq!(
+            rw.rank_at(0, 0),
+            rw.rank_at(0, 1),
+            "same column reveals together"
+        );
     }
 }

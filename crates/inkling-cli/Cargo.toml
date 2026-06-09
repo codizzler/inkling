@@ -1,0 +1,19 @@
+[package]
+name = "inkling-cli"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.74"
+description = "Reveal ASCII art from progress piped on stdin: the language-agnostic inkling bridge."
+repository = "https://github.com/codizzler/inkling"
+license = "MIT"
+keywords = ["progress", "cli", "ascii", "loader", "pipe"]
+categories = ["command-line-utilities", "visualization"]
+readme = "README.md"
+
+# Installs the `inkling` binary: `cargo install inkling-cli`.
+[[bin]]
+name = "inkling"
+path = "src/main.rs"
+
+[dependencies]
+inkling = { package = "inkling-loader", path = "../inkling", version = "0.0.1" }

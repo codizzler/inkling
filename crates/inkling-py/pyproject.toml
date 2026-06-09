@@ -1,0 +1,30 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "inkling"
+description = "Reveal ASCII art as a progress indicator."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+keywords = ["progress", "ascii", "terminal", "loader", "tqdm"]
+authors = [{ name = "Cody Taylor" }]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Topic :: Terminals",
+    "Topic :: Utilities",
+    "License :: OSI Approved :: MIT License",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/codizzler/inkling"
+Repository = "https://github.com/codizzler/inkling"
+
+[tool.maturin]
+# Add the PyO3 extension-module feature only for the wheel build, so plain
+# `cargo check` stays an ordinary interpreter-linked build.
+features = ["pyo3/extension-module"]
+module-name = "inkling"

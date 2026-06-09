@@ -31,7 +31,7 @@ use crossterm::{
 };
 
 use crate::art::Art;
-use crate::ordering::{Geodesic, Ordering};
+use crate::ordering::{Directional, Ordering};
 use crate::render::Style;
 
 /// The built-in art used when you do not supply your own.
@@ -216,7 +216,7 @@ impl Builder {
         Builder {
             total: 0,
             art: None,
-            ordering: Box::new(Geodesic::default()),
+            ordering: Box::new(Directional::default()),
             style: Style::default(),
             message: String::new(),
         }
@@ -234,7 +234,7 @@ impl Builder {
         self
     }
 
-    /// The ordering that decides the reveal path. Defaults to [`Geodesic`].
+    /// The ordering that decides the reveal path. Defaults to [`Directional`].
     pub fn ordering(mut self, ordering: impl Ordering + 'static) -> Self {
         self.ordering = Box::new(ordering);
         self

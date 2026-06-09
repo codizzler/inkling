@@ -1,0 +1,26 @@
+[package]
+name = "inkling-py"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.74"
+description = "Python bindings for inkling: reveal ASCII art as a progress indicator."
+repository = "https://github.com/codizzler/inkling"
+license = "MIT"
+publish = false
+
+# Its own workspace root: the parent cargo workspace excludes this crate because
+# it builds as a Python extension via maturin, which needs a Python interpreter
+# that a plain `cargo build` should not require.
+[workspace]
+
+[lib]
+name = "inkling"
+crate-type = ["cdylib"]
+
+# Renamed to inkling-core because this crate's own library is named `inkling`
+# (the Python module), which would otherwise shadow the dependency.
+[dependencies]
+inkling-core = { package = "inkling-loader", path = "../inkling" }
+# extension-module is added by maturin (see pyproject.toml) so `cargo check`
+# stays a normal, interpreter-linked build.
+pyo3 = { version = "0.22", features = ["abi3-py38"] }

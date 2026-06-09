@@ -50,6 +50,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "inkling-cli"
+version = "0.0.1"
+dependencies = [
+ "inkling-loader",
+]
+
+[[package]]
 name = "inkling-loader"
 version = "0.0.1"
 dependencies = [

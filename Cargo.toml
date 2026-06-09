@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["crates/inkling"]
+
+# Future members (language bindings around the same pure core):
+#   crates/inkling-py    Python (PyO3 / maturin)
+#   crates/inkling-node  Node (napi-rs)
+#   crates/inkling-wasm  browser demo (wasm-bindgen)

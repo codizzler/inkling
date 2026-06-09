@@ -1,0 +1,23 @@
+[package]
+name = "inkling-loader"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.74"
+description = "Reveal arbitrary ASCII art as a progress indicator by choosing the order its glyphs appear."
+repository = "https://github.com/codizzler/inkling"
+license = "MIT"
+keywords = ["progress", "ascii", "terminal", "tui", "animation"]
+categories = ["command-line-interface", "visualization"]
+
+# Published as `inkling-loader` (the short name `inkling` is taken), but imported as `inkling`.
+[lib]
+name = "inkling"
+
+[features]
+default = ["terminal"]
+# The core (art, rank, ordering, easing, frame) is pure std with zero
+# dependencies. Only the live terminal renderer pulls in crossterm.
+terminal = ["dep:crossterm"]
+
+[dependencies]
+crossterm = { version = "0.28", optional = true }

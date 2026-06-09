@@ -14,7 +14,7 @@ use std::io::IsTerminal;
 use inkling::{
     art::Art,
     frame,
-    ordering::{Geodesic, GeodesicReport, Ordering, StartHint},
+    ordering::{Geodesic, GeodesicReport, Ordering},
 };
 
 fn main() {
@@ -32,9 +32,7 @@ fn main() {
         None => Art::parse(&serpent(64, 13)),
     };
 
-    let ordering = Geodesic {
-        start: StartHint::TopLeft,
-    };
+    let ordering = Geodesic::default();
     let GeodesicReport {
         ink_cells,
         connected_cells,

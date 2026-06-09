@@ -135,8 +135,10 @@ progress. Assigning ranks is the one pluggable seam, the `Ordering` trait:
 - **`Geodesic`** is the signature reveal. It treats the ink as a graph, takes the largest
   connected component, finds the spine with a double BFS sweep, and ranks each cell by
   geodesic distance along it, so a serpent paints from one tip to the other along its own
-  body. Detached ink inherits the rank of its nearest spine cell, so loose detail reveals
-  beside the part it belongs to rather than dumping at the end.
+  body. Hand-drawn art is usually many separate strokes, so when the ink is fragmented it
+  bridges the small gaps and still traces the whole body head to tail; already-connected art
+  is traced strictly. Detached ink inherits the rank of its nearest spine cell, so loose
+  detail reveals beside the part it belongs to rather than dumping at the end.
 - **`Scanline`** is the plain reading order baseline. Bring your own by implementing the
   trait.
 

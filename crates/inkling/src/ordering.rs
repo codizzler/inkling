@@ -131,15 +131,37 @@ impl Ordering for Directional {
 /// the chosen start, normalised to `0..=1`. A serpent therefore paints from one
 /// tip to the other along its body, around every coil, with no per-art tuning.
 ///
+/// Hand-drawn ASCII is usually many separate strokes, not one connected line.
+/// When the ink is fragmented the spine **bridges small gaps** so the whole body
+/// still traces as one path, head to tail; when it is already mostly connected it
+/// is traced strictly, with no shortcuts. The switch is automatic (see
+/// [`Spine::solve`] and [`Geodesic::bridge`]).
+///
 /// Detached ink (shading, flecks, a signature) does **not** dump at the end.
 /// Every cell inherits the rank of the nearest spine cell, a geodesic Voronoi
 /// computed by a multi-source flood, so detail reveals in step with the body it
 /// sits beside. Both behaviours fall out of one metric; neither is a special
 /// case, so imperfect hand-drawn art still reveals gracefully.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct Geodesic {
     /// Which tip of the spine the reveal begins from.
     pub start: StartHint,
+    /// The largest gap, in blank cells, the spine may step across. Bridging only
+    /// engages when the art is actually fragmented (see [`Spine::solve`]), so it
+    /// stitches the separate strokes of hand-drawn ASCII into one body without ever
+    /// adding shortcuts to art that was already connected. `0` disables it.
+    pub bridge: u16,
+}
+
+impl Default for Geodesic {
+    /// Start at the top-left tip and bridge single-cell gaps when the art is
+    /// fragmented, which is what most hand-drawn ASCII needs.
+    fn default() -> Self {
+        Geodesic {
+            start: StartHint::default(),
+            bridge: 1,
+        }
+    }
 }
 
 /// Which end of the spine the [`Geodesic`] reveal starts at.
@@ -170,7 +192,7 @@ pub struct GeodesicReport {
 impl Geodesic {
     /// Inspect the art without building a full rank map.
     pub fn diagnose(&self, art: &Art) -> GeodesicReport {
-        match Spine::solve(art, self.start) {
+        match Spine::solve(art, self.start, self.bridge) {
             Some(spine) => GeodesicReport {
                 ink_cells: art.ink_count(),
                 connected_cells: spine.dist.iter().filter(|d| d.is_some()).count(),
@@ -191,7 +213,7 @@ impl Ordering for Geodesic {
         let h = art.height();
         let mut map = RankMap::new(w, h);
 
-        let Some(spine) = Spine::solve(art, self.start) else {
+        let Some(spine) = Spine::solve(art, self.start, self.bridge) else {
             return map; // no ink
         };
 
@@ -235,6 +257,10 @@ impl Ordering for Geodesic {
     }
 }
 
+/// If the largest strictly 8-connected component covers at least this fraction of
+/// the ink, the art is treated as already whole and traced without bridging.
+const STRICT_CONNECTED_MIN: f32 = 0.6;
+
 /// The traced spine of the art's largest connected component.
 struct Spine {
     /// Geodesic distance from the chosen start within the largest component;
@@ -245,13 +271,33 @@ struct Spine {
 }
 
 impl Spine {
-    fn solve(art: &Art, hint: StartHint) -> Option<Self> {
-        let seed = largest_component_seed(art)?;
+    fn solve(art: &Art, hint: StartHint, bridge: u16) -> Option<Self> {
+        // If the art is already mostly one 8-connected piece, trace it strictly;
+        // only stitch gaps when it is genuinely fragmented. Bridging then fixes
+        // hand-drawn art split into strokes without adding shortcuts across art
+        // that was already whole (which would shorten the spine and cut corners).
+        let strict_seed = largest_component_seed(art, 0)?;
+        let strict_size = bfs(art, strict_seed, 0)
+            .0
+            .iter()
+            .filter(|d| d.is_some())
+            .count();
+        let bridge = if (strict_size as f32) < STRICT_CONNECTED_MIN * art.ink_count().max(1) as f32
+        {
+            bridge
+        } else {
+            0
+        };
 
         // Double sweep → the two ends (A, B) of the component's longest geodesic.
-        let (_, far_a) = bfs(art, seed);
-        let (dist_a, far_b) = bfs(art, far_a);
-        let (dist_b, _) = bfs(art, far_b);
+        let seed = if bridge == 0 {
+            strict_seed
+        } else {
+            largest_component_seed(art, bridge)?
+        };
+        let (_, far_a) = bfs(art, seed, bridge);
+        let (dist_a, far_b) = bfs(art, far_a, bridge);
+        let (dist_b, _) = bfs(art, far_b, bridge);
 
         // Pick which endpoint to start from.
         let w = art.width() as usize;
@@ -289,8 +335,9 @@ fn neighbours(index: usize, w: u16, h: u16) -> impl Iterator<Item = usize> {
         })
 }
 
-/// A seed cell in the largest 8-connected ink component (`None` if no ink).
-fn largest_component_seed(art: &Art) -> Option<usize> {
+/// A seed cell in the largest ink component (`None` if no ink). With `bridge > 0`
+/// the component spans gaps of that many blank cells.
+fn largest_component_seed(art: &Art, bridge: u16) -> Option<usize> {
     let (w, h) = (art.width(), art.height());
     let mut visited = vec![false; w as usize * h as usize];
     let mut queue = VecDeque::new();
@@ -306,8 +353,8 @@ fn largest_component_seed(art: &Art) -> Option<usize> {
         queue.push_back(seed);
         while let Some(cur) = queue.pop_front() {
             size += 1;
-            for ni in neighbours(cur, w, h) {
-                if !visited[ni] && is_ink_index(art, ni) {
+            for ni in bridged_neighbours(art, cur, bridge) {
+                if !visited[ni] {
                     visited[ni] = true;
                     queue.push_back(ni);
                 }
@@ -320,9 +367,10 @@ fn largest_component_seed(art: &Art) -> Option<usize> {
     best.map(|(_, seed)| seed)
 }
 
-/// BFS from `source` over ink cells (8-connectivity). Returns the distance to
-/// every cell (`None` where unreachable) and the farthest reachable cell.
-fn bfs(art: &Art, source: usize) -> (Vec<Option<u32>>, usize) {
+/// BFS from `source` over ink cells, stepping across gaps of up to `bridge` blank
+/// cells. Returns the distance to every cell (`None` where unreachable) and the
+/// farthest reachable cell.
+fn bfs(art: &Art, source: usize, bridge: u16) -> (Vec<Option<u32>>, usize) {
     let (w, h) = (art.width(), art.height());
     let mut dist = vec![None; w as usize * h as usize];
     let mut queue = VecDeque::new();
@@ -337,14 +385,39 @@ fn bfs(art: &Art, source: usize) -> (Vec<Option<u32>>, usize) {
             far_d = d;
             farthest = cur;
         }
-        for ni in neighbours(cur, w, h) {
-            if dist[ni].is_none() && is_ink_index(art, ni) {
+        for ni in bridged_neighbours(art, cur, bridge) {
+            if dist[ni].is_none() {
                 dist[ni] = Some(d + 1);
                 queue.push_back(ni);
             }
         }
     }
     (dist, farthest)
+}
+
+/// Ink cells within Chebyshev distance `bridge + 1` of `index`, so `bridge = 0`
+/// is plain 8-connectivity and larger values let the spine step across small gaps
+/// between the separate strokes of hand-drawn art.
+fn bridged_neighbours(art: &Art, index: usize, bridge: u16) -> Vec<usize> {
+    let (w, h) = (art.width() as i32, art.height() as i32);
+    let r = bridge as i32 + 1;
+    let (cx, cy) = (index as i32 % w, index as i32 / w);
+    let mut out = Vec::new();
+    for dy in -r..=r {
+        for dx in -r..=r {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let (nx, ny) = (cx + dx, cy + dy);
+            if nx >= 0 && ny >= 0 && nx < w && ny < h {
+                let ni = (ny * w + nx) as usize;
+                if is_ink_index(art, ni) {
+                    out.push(ni);
+                }
+            }
+        }
+    }
+    out
 }
 
 #[inline]
@@ -401,6 +474,35 @@ mod tests {
         let report = Geodesic::default().diagnose(&Art::parse("==========    ."));
         assert_eq!(report.ink_cells, 11);
         assert_eq!(report.connected_cells, 10); // the bar; the '.' is an island
+    }
+
+    /// Fragmented art (two strokes one blank cell apart) reveals as one body: the
+    /// default bridges the gap, while `bridge: 0` keeps the strokes separate.
+    #[test]
+    fn bridges_small_gaps_when_fragmented() {
+        let art = Art::parse("== ==");
+        let strict = Geodesic {
+            start: StartHint::TopLeft,
+            bridge: 0,
+        };
+        assert_eq!(strict.diagnose(&art).connected_cells, 2);
+        assert_eq!(Geodesic::default().diagnose(&art).connected_cells, 4);
+    }
+
+    /// Already-connected art must not be bridged: shortcuts would cut across the
+    /// body and shrink the spine, so a clean stroke keeps its full-length trace.
+    #[test]
+    fn connected_art_is_not_bridged() {
+        // A zigzag whose passes sit two rows apart; bridging would short-circuit
+        // it, but since it is one strict component the spine stays long.
+        let art = Art::parse("####\n   #\n####\n#\n####");
+        let report = Geodesic::default().diagnose(&art);
+        assert_eq!(report.connected_cells, report.ink_cells);
+        assert!(
+            report.spine_length >= 9,
+            "spine was {}",
+            report.spine_length
+        );
     }
 
     /// `Auto` weights for terminal cells being about twice as tall as wide: art

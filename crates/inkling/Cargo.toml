@@ -1,6 +1,6 @@
 [package]
 name = "inkling-loader"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 rust-version = "1.74"
 description = "Reveal arbitrary ASCII art as a progress indicator by choosing the order its glyphs appear."
@@ -14,11 +14,17 @@ categories = ["command-line-interface", "visualization"]
 [lib]
 name = "inkling"
 
+# Document every feature on docs.rs, not just the defaults.
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = ["terminal"]
 # The core (art, rank, ordering, easing, frame) is pure std with zero
-# dependencies. Only the live terminal renderer pulls in crossterm.
-terminal = ["dep:crossterm"]
+# dependencies. Only the live terminal renderer pulls in crossterm (and
+# unicode-width, for aligning wide glyphs).
+terminal = ["dep:crossterm", "dep:unicode-width"]
 
 [dependencies]
 crossterm = { version = "0.28", optional = true }
+unicode-width = { version = "0.1", optional = true }

@@ -13,7 +13,7 @@
 //! advance it from anywhere, and a living reveal paints itself until you finish.
 //!
 //! ```no_run
-//! use inkling::Loader;
+//! use inkling::prelude::*;
 //!
 //! let loader = Loader::new(100);
 //! for _ in 0..100 {
@@ -26,7 +26,7 @@
 //! Or wrap any iterator and forget about it:
 //!
 //! ```no_run
-//! use inkling::ProgressIteratorExt;
+//! use inkling::prelude::*;
 //!
 //! for _item in (0..100).inkling() {
 //!     // ... work ...
@@ -75,3 +75,14 @@ pub use rank::RankMap;
 
 #[cfg(feature = "terminal")]
 pub use loader::{Handle, Loader, ProgressIteratorExt};
+
+/// The handful of imports most programs want, in one glob:
+/// `use inkling::prelude::*;`.
+///
+/// Brings in `Loader`, the `.inkling()` iterator adaptor (via
+/// `ProgressIteratorExt`), the thread-safe `Handle`, and `Art`.
+pub mod prelude {
+    pub use crate::Art;
+    #[cfg(feature = "terminal")]
+    pub use crate::{Handle, Loader, ProgressIteratorExt};
+}

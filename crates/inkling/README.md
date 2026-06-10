@@ -17,7 +17,7 @@ inkling-loader = "0.1"
 ```
 
 ```rust
-use inkling::Loader;
+use inkling::prelude::*;
 
 let loader = Loader::new(1000);
 loader.set_message("Downloading");

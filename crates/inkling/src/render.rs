@@ -27,6 +27,13 @@ use crate::{art::Art, easing::Easing, rank::RankMap};
 /// repaints as it moves; level `GLOW_LEVELS` is "settled" and paints just once.
 const GLOW_LEVELS: u8 = 8;
 
+/// DEC private mode 2026, *synchronized output*. A terminal that understands it
+/// buffers everything between begin and end and presents the frame as one atomic
+/// update, so a reveal never tears mid-paint; terminals that do not recognise the
+/// mode silently ignore both markers, so it is always safe to emit.
+pub(crate) const SYNC_BEGIN: &str = "\x1b[?2026h";
+pub(crate) const SYNC_END: &str = "\x1b[?2026l";
+
 /// How revealed ink is coloured.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Palette {
@@ -126,7 +133,7 @@ impl<'a> Reveal<'a> {
         let active = out.is_terminal();
         let origin = if active {
             let (cols, _) = terminal::size().unwrap_or((art.width(), art.height()));
-            (cols.saturating_sub(art.width()) / 2, 1)
+            (cols.saturating_sub(art_cols(art)) / 2, 1)
         } else {
             (0, 0)
         };
@@ -234,7 +241,10 @@ fn paint(
 ) -> io::Result<()> {
     let mut dirty = false;
     for y in 0..art.height() {
+        let mut col = 0u16; // display column, so wide glyphs stay aligned
         for x in 0..art.width() {
+            let glyph = art.glyph(x, y);
+            let cw = glyph_cols(glyph);
             let idx = art.index(x, y);
             let target = match ranks.rank_at(x, y) {
                 Some(r) if r <= progress => {
@@ -253,32 +263,41 @@ fn paint(
                 _ => CellState::Hidden,
             };
 
-            if state[idx] == target {
-                continue;
-            }
-            queue!(out, MoveTo(ox + x, oy + y))?;
-            match target {
-                CellState::Hidden => queue!(out, Print(' '))?,
-                CellState::Lit(level) => {
-                    if style.color {
-                        let (r, g, b) = match style.palette {
-                            Palette::Rainbow => rainbow_rgb(x, y, 0.0),
-                            Palette::Glow => {
-                                blend(style.head, style.body, level as f32 / GLOW_LEVELS as f32)
-                            }
-                        };
-                        queue!(out, SetForegroundColor(Color::Rgb { r, g, b }))?;
-                    }
-                    queue!(out, Print(art.glyph(x, y)))?;
+            if state[idx] != target {
+                if !dirty {
+                    queue!(out, Print(SYNC_BEGIN))?;
                 }
+                queue!(out, MoveTo(ox + col, oy + y))?;
+                match target {
+                    // Clear across the glyph's full display width so a hidden wide
+                    // cell never leaves a stray half-column behind.
+                    CellState::Hidden => {
+                        for _ in 0..cw {
+                            queue!(out, Print(' '))?;
+                        }
+                    }
+                    CellState::Lit(level) => {
+                        if style.color {
+                            let (r, g, b) = match style.palette {
+                                Palette::Rainbow => rainbow_rgb(x, y, 0.0),
+                                Palette::Glow => {
+                                    blend(style.head, style.body, level as f32 / GLOW_LEVELS as f32)
+                                }
+                            };
+                            queue!(out, SetForegroundColor(Color::Rgb { r, g, b }))?;
+                        }
+                        queue!(out, Print(glyph))?;
+                    }
+                }
+                state[idx] = target;
+                dirty = true;
             }
-            state[idx] = target;
-            dirty = true;
+            col += cw;
         }
     }
 
     if dirty {
-        queue!(out, ResetColor)?;
+        queue!(out, ResetColor, Print(SYNC_END))?;
         out.flush()?;
     }
     Ok(())
@@ -342,4 +361,59 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     let m = l - c / 2.0;
     let to = |v: f32| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
     (to(r), to(g), to(b))
+}
+
+/// Display columns a glyph occupies: 0 for zero-width or combining marks, 2 for
+/// wide glyphs (CJK and many emoji), 1 otherwise. Keeps the reveal aligned when
+/// the art is not pure ASCII.
+pub(crate) fn glyph_cols(c: char) -> u16 {
+    unicode_width::UnicodeWidthChar::width(c).unwrap_or(0) as u16
+}
+
+/// The widest row of `art`, in display columns.
+pub(crate) fn art_cols(art: &Art) -> u16 {
+    (0..art.height())
+        .map(|y| {
+            (0..art.width())
+                .map(|x| glyph_cols(art.glyph(x, y)))
+                .sum::<u16>()
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Truncate `s` to at most `max` display columns, dropping whole glyphs so a wide
+/// glyph is never split across the edge.
+pub(crate) fn truncate_to_cols(s: &str, max: u16) -> String {
+    let mut out = String::new();
+    let mut used = 0u16;
+    for c in s.chars() {
+        let w = glyph_cols(c);
+        if used + w > max {
+            break;
+        }
+        out.push(c);
+        used += w;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_width_counts_wide_glyphs() {
+        assert_eq!(glyph_cols('a'), 1);
+        assert_eq!(glyph_cols('世'), 2);
+        let art = Art::parse("a世\nbb"); // row 0 is 1 + 2 = 3 columns wide
+        assert_eq!(art_cols(&art), 3);
+    }
+
+    #[test]
+    fn truncate_respects_display_width() {
+        assert_eq!(truncate_to_cols("abc", 2), "ab");
+        assert_eq!(truncate_to_cols("a世", 3), "a世"); // 1 + 2 == 3 fits
+        assert_eq!(truncate_to_cols("世界", 3), "世"); // 2 + 2 > 3, drop the second
+    }
 }

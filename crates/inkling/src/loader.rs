@@ -385,7 +385,10 @@ fn run(shared: Arc<Shared>) {
     let (ox, oy) = if fullscreen {
         let (cols, vr) = terminal::size().unwrap_or((w, h + 2));
         let _ = execute!(out, EnterAlternateScreen, Hide, Clear(ClearType::All));
-        (cols.saturating_sub(w) / 2, vr.saturating_sub(h + 1) / 2)
+        (
+            cols.saturating_sub(crate::render::art_cols(&shared.art)) / 2,
+            vr.saturating_sub(h + 1) / 2,
+        )
     } else {
         let _ = execute!(out, Hide);
         (0, 0)
@@ -450,6 +453,7 @@ fn draw_frame(
     let (w, h) = (art.width(), art.height());
     let style = &shared.style;
 
+    queue!(out, Print(crate::render::SYNC_BEGIN))?;
     for y in 0..h {
         queue!(out, MoveTo(ox, oy + y))?;
         let mut last: Option<(u8, u8, u8)> = None;
@@ -495,7 +499,7 @@ fn draw_frame(
         .unwrap_or_default();
     if !msg.is_empty() {
         let cols = terminal::size().map(|(c, _)| c).unwrap_or(80);
-        let shown: String = msg.chars().take(cols.saturating_sub(1) as usize).collect();
+        let shown = crate::render::truncate_to_cols(&msg, cols.saturating_sub(1));
         if style.color {
             queue!(
                 out,
@@ -508,6 +512,7 @@ fn draw_frame(
         }
         queue!(out, Print(shown), ResetColor)?;
     }
+    queue!(out, Print(crate::render::SYNC_END))?;
     out.flush()
 }
 
@@ -524,6 +529,7 @@ fn draw_inline(
     let (w, h) = (art.width(), art.height());
     let style = &shared.style;
 
+    queue!(out, Print(crate::render::SYNC_BEGIN))?;
     if !first {
         queue!(out, MoveToPreviousLine(h))?;
     }
@@ -573,7 +579,7 @@ fn draw_inline(
         .unwrap_or_default();
     if !msg.is_empty() {
         let cols = terminal::size().map(|(c, _)| c).unwrap_or(80);
-        let shown: String = msg.chars().take(cols.saturating_sub(1) as usize).collect();
+        let shown = crate::render::truncate_to_cols(&msg, cols.saturating_sub(1));
         if style.color {
             queue!(
                 out,
@@ -586,6 +592,7 @@ fn draw_inline(
         }
         queue!(out, Print(shown), ResetColor)?;
     }
+    queue!(out, Print(crate::render::SYNC_END))?;
     out.flush()
 }
 

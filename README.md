@@ -58,7 +58,7 @@ next line of output follows directly below it. Updates are lock free, so any thr
 report progress.
 
 ```rust
-use inkling::Loader;
+use inkling::prelude::*;
 
 let loader = Loader::new(1000);
 loader.set_message("Downloading");
@@ -72,12 +72,15 @@ loader.finish();
 Wrap an iterator and it advances itself, taking the total from `size_hint`:
 
 ```rust
-use inkling::ProgressIteratorExt;
+use inkling::prelude::*;
 
 for item in items.iter().inkling() {
     process(item);
 }
 ```
+
+That `use inkling::prelude::*;` is the one import most programs need: it brings `Loader`,
+the `.inkling()` adaptor, and `Art`.
 
 Wrap a reader and bytes advance it, which is what a download wants:
 
@@ -196,7 +199,9 @@ precisely so these stay thin.
 | macOS, Linux | Any modern terminal. |
 
 Inkling honours `NO_COLOR`, never writes escape codes when output is not a terminal, and
-falls back to a single plain frame when there is no TTY.
+falls back to a single plain frame when there is no TTY. Wide glyphs (CJK and many emoji)
+are aligned by display width, and every frame is bracketed in synchronized output
+(DEC 2026) so terminals that support it repaint without tearing.
 
 ## Showcase
 
@@ -214,8 +219,6 @@ command way to capture them with `vhs`.
 - Node (napi) and WebAssembly bindings, alongside the existing CLI and Python package.
 - An authored path layer, so the reveal direction can be drawn by hand.
 - Zhang and Suen skeleton thinning to refine the spine on thick art.
-- Unicode width handling for wide glyphs and emoji.
-- Synchronized output (DEC 2026) to remove tearing where terminals support it.
 
 ## Credits
 

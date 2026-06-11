@@ -15,6 +15,9 @@
 [![downloads](https://img.shields.io/crates/d/inkling-loader?color=44cc88)](https://crates.io/crates/inkling-loader)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE-MIT)
 
+**Get started in your language:**
+[Rust](#install) · [CLI / any shell](#command-line-for-any-language-or-shell) · [Python](#python) · [Node](#node) · [Browser / WASM](#browser-webassembly)
+
 Inkling maps progress onto the order a picture's glyphs appear. A normal bar fills a
 line; Inkling paints a drawing, one glyph at a time, as your task runs. The name is
 literal: the engine calls every non blank glyph *ink*, and an inkling is something
@@ -254,7 +257,17 @@ command way to capture them with `vhs`.
 
 ## Roadmap
 
-- An authored path layer, so the reveal direction can be drawn by hand.
+- **Authored path layer.** Let the artist draw the reveal order by hand, a numbered path laid
+  over the art, so a piece can override the automatic ordering when it wants a specific
+  choreography (a comet's tail first, a signature stroke last).
+- **More orderings.** Radial and spiral reveals out from a center, a seeded dissolve, and
+  flood-from-a-point, all behind the same `Ordering` trait.
+- **Colour carried by the art.** Parse ANSI colour in the source so an already-coloured piece
+  reveals in its own palette, not only the built-in ones.
+- **Graceful colour downscaling.** Detect terminal depth (`COLORTERM`) and map the rainbow and
+  glow palettes onto 256- and 16-colour terminals instead of assuming truecolor.
+- **`no_std` core.** The core is already dependency free; a `no_std + alloc` build would let the
+  engine run on embedded and tiny WASI targets.
 
 ## Credits
 

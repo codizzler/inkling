@@ -164,36 +164,70 @@ dependencies and builds with `--no-default-features`. Only the terminal layer pu
 
 ## Using it from other languages
 
-Inkling is a Rust library, so Rust programs use it directly. For everyone else the same
-engine ships two ways, both thin wrappers over the pure core:
+Inkling is a Rust library, so Rust programs use it directly. Everyone else gets the same
+engine through a thin wrapper, never a reimplementation, so the behaviour is identical.
 
-**The `inkling` CLI** is the language-agnostic bridge. Pipe progress to it the way you pipe
-to `pv`, no bindings to link against, so bash, Make, or any language can drive the reveal:
+### Command line, for any language or shell
+
+The `inkling` binary is the language-agnostic bridge. Pipe progress to it the way you pipe to
+`pv`, with no bindings to link against, so bash, Make, Python, or anything that can write to a
+pipe can drive the reveal:
 
 ```sh
-cargo install inkling-cli          # installs the `inkling` binary
+cargo install inkling-cli         # installs the `inkling` binary
+# N sets progress, +N advances, any other line becomes the caption
 seq 0 100 | inkling --total 100
 ```
 
-**A Python package** on PyPI, installed as `inkling-loader` and imported as `inkling`,
-exposes the same `Loader` as a context manager:
+### Python
 
-```sh
-pip install inkling-loader
-```
+`pip install inkling-loader`, then `import inkling`. The same `Loader`, as a context manager,
+the way you would reach for `tqdm` but the bar is a drawing:
 
 ```python
 from inkling import Loader
 
 with Loader(total=len(items), rainbow=True) as bar:
-    for it in items:
-        work(it)
+    for item in items:
+        work(item)
         bar.inc()
 ```
 
-There is a Node package too (`npm install inkling-loader`, built with napi-rs) and a
-WebAssembly build (`inkling-wasm`) that runs the engine in the browser. The core was kept
-small and dependency free precisely so all of these stay thin wrappers over one engine.
+### Node
+
+`npm install inkling-loader`, a native addon built with napi-rs, exposing the same `Loader`:
+
+```js
+const { Loader } = require("inkling-loader");
+
+const bar = new Loader({ total: items.length, rainbow: true });
+for (const item of items) {
+  work(item);
+  bar.inc();
+}
+bar.finish();
+```
+
+### Browser (WebAssembly)
+
+`npm install inkling-wasm` runs the engine in the browser. There is no terminal there, so it
+exposes the model instead of a renderer: parse art, pick an ordering, read back each cell's
+reveal rank, and draw the frames yourself (a cell shows once its rank is `<= progress`):
+
+```js
+import init, { Reveal } from "inkling-wasm";
+
+await init();
+const reveal = new Reveal(art, "geodesic");
+const glyphs = reveal.glyphs();   // width*height chars, row-major
+const ranks = reveal.ranks();     // Float32Array, -1 for background
+// show glyphs[i] wherever ranks[i] >= 0 && ranks[i] <= progress
+```
+
+Every binding is a shim over the one pure core, kept dependency free precisely so they stay
+thin. Full docs and the constructor options live in each package's README: the
+[CLI](crates/inkling-cli#readme), [Python](crates/inkling-py#readme),
+[Node](crates/inkling-node#readme), and [WebAssembly](crates/inkling-wasm#readme).
 
 ## Behaviour
 

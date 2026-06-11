@@ -9,6 +9,8 @@
 [![crates.io](https://img.shields.io/crates/v/inkling-loader?logo=rust&logoColor=white&color=e8b455)](https://crates.io/crates/inkling-loader)
 [![docs.rs](https://img.shields.io/docsrs/inkling-loader?logo=docsdotrs&logoColor=white)](https://docs.rs/inkling-loader)
 [![PyPI](https://img.shields.io/pypi/v/inkling-loader?logo=pypi&logoColor=white)](https://pypi.org/project/inkling-loader/)
+[![npm](https://img.shields.io/npm/v/inkling-loader?logo=npm&logoColor=white)](https://www.npmjs.com/package/inkling-loader)
+[![npm wasm](https://img.shields.io/npm/v/inkling-wasm?logo=webassembly&logoColor=white&label=wasm)](https://www.npmjs.com/package/inkling-wasm)
 [![CI](https://github.com/codizzler/inkling/actions/workflows/ci.yml/badge.svg)](https://github.com/codizzler/inkling/actions/workflows/ci.yml)
 [![downloads](https://img.shields.io/crates/d/inkling-loader?color=44cc88)](https://crates.io/crates/inkling-loader)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE-MIT)

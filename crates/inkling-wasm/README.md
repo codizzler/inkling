@@ -4,6 +4,8 @@ Reveal ASCII art as a progress indicator, in the browser. The same pure Rust cor
 [inkling](https://github.com/codizzler/inkling) crate, compiled to WebAssembly with
 [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/).
 
+![inkling](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
+
 The browser has no terminal, so this exposes the engine's *model* rather than a renderer:
 parse art, choose an ordering, and read back the per-cell reveal ranks. Your JavaScript draws
 each frame however it likes, which is exactly how the native renderers work.

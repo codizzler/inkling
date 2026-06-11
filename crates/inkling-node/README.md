@@ -4,8 +4,10 @@ Reveal ASCII art as a progress indicator, from Node. The same Rust core as the
 [inkling](https://github.com/codizzler/inkling) crate, compiled to a native addon with
 [napi-rs](https://napi.rs).
 
+![inkling](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
+
 ```sh
-npm install inkling-loader   # once published
+npm install inkling-loader
 ```
 
 ```js

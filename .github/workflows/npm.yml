@@ -51,6 +51,9 @@ jobs:
     name: publish node to npm
     needs: node-build
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # npm trusted publishing (OIDC), once it is configured
+      contents: read
     defaults:
       run:
         working-directory: crates/inkling-node
@@ -60,6 +63,7 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # OIDC trusted publishing needs npm >= 11.5
       - run: npm install
       - uses: actions/download-artifact@v4
         with:
@@ -75,12 +79,16 @@ jobs:
   wasm-publish:
     name: publish wasm to npm
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # npm trusted publishing (OIDC), once it is configured
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # OIDC trusted publishing needs npm >= 11.5
       - uses: dtolnay/rust-toolchain@stable
       - uses: jetli/wasm-pack-action@v0.4.0
       - run: wasm-pack build --target web --release

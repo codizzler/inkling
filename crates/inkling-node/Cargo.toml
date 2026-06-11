@@ -1,6 +1,6 @@
 [package]
 name = "inkling-node"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 rust-version = "1.77"
 description = "Node bindings for inkling: reveal ASCII art as a progress indicator."

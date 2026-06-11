@@ -1,6 +1,6 @@
 [package]
 name = "inkling-wasm"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 rust-version = "1.74"
 description = "WebAssembly bindings for inkling: reveal ASCII art as a progress indicator in the browser."

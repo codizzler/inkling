@@ -31,10 +31,12 @@ On end of input the art finishes filled. Run `inkling --help` for every flag
 
 ## The inkling family
 
-This crate, `inkling-cli`, installs the `inkling` binary. The same engine ships three ways:
+This crate, `inkling-cli`, installs the `inkling` binary. The same engine ships five ways:
 
 - **`inkling-cli`** (this crate), the command-line tool. `cargo install inkling-cli`.
-- **`inkling-loader`**, the Rust library it is built on. `cargo add inkling-loader`, import as `inkling`.
+- **`inkling-loader`**, the Rust library it is built on. `cargo add inkling-loader`.
 - **`inkling-loader` on PyPI**, the Python package. `pip install inkling-loader`.
+- **`inkling-loader` on npm**, the Node addon. `npm install inkling-loader`.
+- **`inkling-wasm` on npm**, the WebAssembly build for the browser.
 
 License: MIT.

@@ -38,11 +38,12 @@ npm run build        # produces the native .node addon plus index.js / index.d.t
 
 ## The inkling family
 
-This is the Node package. The same engine ships several ways:
+This is the Node package. The same engine ships five ways:
 
 - **`inkling-loader` on npm** (this package), for Node. `npm install inkling-loader`.
 - **`inkling-loader`** on crates.io, the Rust library. `cargo add inkling-loader`.
 - **`inkling-loader`** on PyPI, the Python package. `pip install inkling-loader`.
 - **`inkling-cli`**, the `inkling` command, to drive a reveal from any language through a pipe.
+- **`inkling-wasm` on npm**, the WebAssembly build for the browser.
 
 Built from the [inkling](https://github.com/codizzler/inkling) Rust core. License: MIT.

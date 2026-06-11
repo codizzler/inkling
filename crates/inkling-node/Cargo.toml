@@ -12,13 +12,13 @@ publish = false
 # it builds as a native Node addon with napi-rs, not a plain cargo build.
 [workspace]
 
+# The library is named after the package (inkling_node) so napi-rs can find the
+# compiled cdylib; the JS-facing name comes from `napi.name` in package.json.
 [lib]
-name = "inkling"
 crate-type = ["cdylib"]
 
-# Renamed because this crate's own library is named `inkling`, which would
-# otherwise shadow the dependency. Node has a terminal, so this uses the full
-# library (the live renderer), unlike the browser build.
+# Node has a terminal, so this pulls in the full library (the live renderer),
+# unlike the browser build. Aliased to inkling-core to read clearly.
 [dependencies]
 inkling-core = { package = "inkling-loader", path = "../inkling" }
 napi = { version = "2", default-features = false, features = ["napi4"] }

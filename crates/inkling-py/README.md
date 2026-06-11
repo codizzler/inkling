@@ -44,12 +44,14 @@ Constructor keywords: `total`, `art`, `art_path`, `rainbow`, `geodesic`, `readin
 
 ## The inkling family
 
-This is the Python package. The same engine ships three ways:
+This is the Python package. The same engine ships five ways:
 
 - **`inkling-loader` on PyPI** (this package), for Python. `pip install inkling-loader`, import as `inkling`.
 - **`inkling-loader`** on crates.io, the Rust library. `cargo add inkling-loader`.
 - **`inkling-cli`**, the `inkling` command, to drive a reveal from any language through a pipe.
   `cargo install inkling-cli`.
+- **`inkling-loader` on npm**, the Node addon. `npm install inkling-loader`.
+- **`inkling-wasm` on npm**, the WebAssembly build for the browser.
 
 ## Building from source
 

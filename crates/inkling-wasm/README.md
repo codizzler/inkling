@@ -8,8 +8,12 @@ The browser has no terminal, so this exposes the engine's *model* rather than a 
 parse art, choose an ordering, and read back the per-cell reveal ranks. Your JavaScript draws
 each frame however it likes, which is exactly how the native renderers work.
 
+```sh
+npm install inkling-wasm
+```
+
 ```js
-import init, { Reveal } from "inkling";
+import init, { Reveal } from "inkling-wasm";
 
 await init();
 const reveal = new Reveal(art, "geodesic"); // or "auto", "top", "left", ...
@@ -34,6 +38,16 @@ cargo install wasm-pack
 wasm-pack build --target web    # emits pkg/ with inkling.js + inkling_bg.wasm
 ```
 
-Then `import` the module from `pkg/`, or publish the package to npm.
+Then `import` the module from `pkg/`, or use the published npm package.
+
+## The inkling family
+
+This is the browser (WebAssembly) build. The same engine ships five ways:
+
+- **`inkling-wasm` on npm** (this package), the WebAssembly build for the browser.
+- **`inkling-loader`** on crates.io, the Rust library. `cargo add inkling-loader`.
+- **`inkling-cli`**, the `inkling` command, to drive a reveal from any language through a pipe.
+- **`inkling-loader`** on PyPI, the Python package. `pip install inkling-loader`.
+- **`inkling-loader`** on npm, the Node addon. `npm install inkling-loader`.
 
 Built from the [inkling](https://github.com/codizzler/inkling) Rust core. License: MIT.

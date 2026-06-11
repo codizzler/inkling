@@ -47,12 +47,14 @@ and builds with `--no-default-features`. Only the live terminal renderer pulls i
 
 ## The inkling family
 
-This crate, `inkling-loader`, is the Rust library. The same engine ships three ways:
+This crate, `inkling-loader`, is the Rust library. The same engine ships five ways:
 
 - **`inkling-loader`** (this crate), the Rust library. `cargo add inkling-loader`, import as `inkling`.
 - **`inkling-cli`**, the `inkling` command, so bash, Make, or any language can drive a reveal
   through a pipe. `cargo install inkling-cli`.
-- **`inkling-loader` on PyPI**, the Python package. `pip install inkling-loader`, import as `inkling`.
+- **`inkling-loader` on PyPI**, the Python package. `pip install inkling-loader`.
+- **`inkling-loader` on npm**, the Node addon. `npm install inkling-loader`.
+- **`inkling-wasm` on npm**, the WebAssembly build for the browser.
 
 ## More
 

@@ -1,0 +1,31 @@
+{
+  "name": "inkling-loader",
+  "version": "0.1.4",
+  "description": "Reveal ASCII art as a progress indicator, from Node, on the inkling engine.",
+  "license": "MIT",
+  "repository": "github:codizzler/inkling",
+  "keywords": ["progress", "ascii", "terminal", "loader", "cli"],
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "inkling",
+    "triples": {
+      "defaults": true,
+      "additional": ["aarch64-apple-darwin"]
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">= 12"
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  }
+}

@@ -45,6 +45,15 @@ The core (`art`, `rank`, `ordering`, `easing`, `frame`) is pure `std` with zero 
 and builds with `--no-default-features`. Only the live terminal renderer pulls in
 [`crossterm`](https://crates.io/crates/crossterm), behind the default `terminal` feature.
 
+## The inkling family
+
+This crate, `inkling-loader`, is the Rust library. The same engine ships three ways:
+
+- **`inkling-loader`** (this crate), the Rust library. `cargo add inkling-loader`, import as `inkling`.
+- **`inkling-cli`**, the `inkling` command, so bash, Make, or any language can drive a reveal
+  through a pipe. `cargo install inkling-cli`.
+- **`inkling-loader` on PyPI**, the Python package. `pip install inkling-loader`, import as `inkling`.
+
 ## More
 
 Full usage, the geodesic write-up, the `inkling` CLI, and the Python package live in the

@@ -51,14 +51,14 @@ dependencies = [
 
 [[package]]
 name = "inkling-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "inkling-loader",
 ]
 
 [[package]]
 name = "inkling-loader"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "crossterm",
  "unicode-width",

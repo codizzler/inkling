@@ -1,0 +1,28 @@
+[package]
+name = "inkling-node"
+version = "0.1.4"
+edition = "2021"
+rust-version = "1.77"
+description = "Node bindings for inkling: reveal ASCII art as a progress indicator."
+repository = "https://github.com/codizzler/inkling"
+license = "MIT"
+publish = false
+
+# Its own workspace root: the parent cargo workspace excludes this crate because
+# it builds as a native Node addon with napi-rs, not a plain cargo build.
+[workspace]
+
+[lib]
+name = "inkling"
+crate-type = ["cdylib"]
+
+# Renamed because this crate's own library is named `inkling`, which would
+# otherwise shadow the dependency. Node has a terminal, so this uses the full
+# library (the live renderer), unlike the browser build.
+[dependencies]
+inkling-core = { package = "inkling-loader", path = "../inkling" }
+napi = { version = "2", default-features = false, features = ["napi4"] }
+napi-derive = "2"
+
+[build-dependencies]
+napi-build = "2"

@@ -1,0 +1,24 @@
+[package]
+name = "inkling-wasm"
+version = "0.1.4"
+edition = "2021"
+rust-version = "1.74"
+description = "WebAssembly bindings for inkling: reveal ASCII art as a progress indicator in the browser."
+repository = "https://github.com/codizzler/inkling"
+license = "MIT"
+publish = false
+
+# Its own workspace root: the parent cargo workspace excludes this crate because
+# it targets wasm32 and is built with wasm-pack, not a plain cargo build.
+[workspace]
+
+[lib]
+name = "inkling"
+crate-type = ["cdylib"]
+
+# Renamed because this crate's own library is named `inkling`, which would
+# otherwise shadow the dependency. The browser has no terminal, so we pull in only
+# the pure, dependency-free core (no crossterm).
+[dependencies]
+inkling-core = { package = "inkling-loader", path = "../inkling", default-features = false }
+wasm-bindgen = "0.2"

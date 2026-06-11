@@ -7,6 +7,17 @@
 //! **the order in which the glyphs of a picture appear**. Give it a dragon and it
 //! paints the dragon as your task runs.
 //!
+//! ## Install
+//!
+//! ```toml
+//! [dependencies]
+//! inkling-loader = "0.1"
+//! ```
+//!
+//! It publishes as `inkling-loader` (the short name was taken) but imports as `inkling`.
+//! Want the command-line tool rather than the library? That is the `inkling-cli` crate
+//! (`cargo install inkling-cli`), which lets any language drive a reveal through a pipe.
+//!
 //! ## Quick start
 //!
 //! The easy front door is [`Loader`](loader::Loader): make one with a total,

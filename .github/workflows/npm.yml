@@ -1,0 +1,91 @@
+name: npm
+
+# Pushing a version tag publishes the Node addon and the WebAssembly package to
+# npm. One-time setup: add an npm automation token as the repo secret NPM_TOKEN
+# (npmjs.com -> Access Tokens -> Generate -> Automation).
+#
+# The Node job follows the standard napi-rs flow (one prebuilt binary per
+# platform, tied together by optionalDependencies). The WASM job is a single,
+# platform-independent package.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  # ---- Node native addon (napi-rs) ----
+  node-build:
+    name: node addon · ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - host: macos-latest
+            target: x86_64-apple-darwin
+          - host: macos-latest
+            target: aarch64-apple-darwin
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.host }}
+    defaults:
+      run:
+        working-directory: crates/inkling-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: npm install
+      - run: npx napi build --platform --release --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.target }}
+          path: crates/inkling-node/*.node
+
+  node-publish:
+    name: publish node to npm
+    needs: node-build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/inkling-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - run: npm install
+      - uses: actions/download-artifact@v4
+        with:
+          path: crates/inkling-node/artifacts
+      - run: npx napi prepublish -t npm --skip-gh-release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ---- WebAssembly package (wasm-pack) ----
+  wasm-publish:
+    name: publish wasm to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - run: wasm-pack build --target web --release
+        working-directory: crates/inkling-wasm
+      - run: npm publish --access public
+        working-directory: crates/inkling-wasm/pkg
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

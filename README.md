@@ -135,13 +135,14 @@ progress. Assigning ranks is the one pluggable seam, the `Ordering` trait:
 - **`Directional`** (the default) wipes along one axis. Tall art paints top to bottom, wide
   art left to right, and nothing shows until the wipe reaches it. It is the intuitive read
   for a loader, and it honours right to left locales with `Directional::reading()`.
-- **`Geodesic`** is the signature reveal. It treats the ink as a graph, takes the largest
-  connected component, finds the spine with a double BFS sweep, and ranks each cell by
-  geodesic distance along it, so a serpent paints from one tip to the other along its own
-  body. Hand-drawn art is usually many separate strokes, so when the ink is fragmented it
-  bridges the small gaps and still traces the whole body head to tail; already-connected art
-  is traced strictly. Detached ink inherits the rank of its nearest spine cell, so loose
-  detail reveals beside the part it belongs to rather than dumping at the end.
+- **`Geodesic`** is the signature reveal. It thins the ink to a one-cell skeleton
+  (Zhang-Suen), the centerline a pen would draw, then traces each piece of that skeleton
+  tip to tip and orders the pieces in reading order. So a serpent paints head to tail, a
+  filled dragon paints down its spine, and a multi-letter logo paints letter by letter. The
+  flesh inherits the value of its nearest centerline cell, so detail reveals in step with the
+  part it hangs from, and a solid blob fills out from the middle. Fragmented hand-drawn
+  strokes are bridged into one piece; already-connected art is traced strictly. A final
+  rank-transform keeps the reveal tracking the bar with no dead zone.
 - **`Scanline`** is the plain reading order baseline. Bring your own by implementing the
   trait.
 
@@ -188,8 +189,9 @@ with Loader(total=len(items), rainbow=True) as bar:
         bar.inc()
 ```
 
-Node (napi) and a WebAssembly build are next; the core was kept small and dependency free
-precisely so these stay thin.
+There is a Node package too (`npm install inkling-loader`, built with napi-rs) and a
+WebAssembly build (`inkling-wasm`) that runs the engine in the browser. The core was kept
+small and dependency free precisely so all of these stay thin wrappers over one engine.
 
 ## Behaviour
 
@@ -216,9 +218,7 @@ command way to capture them with `vhs`.
 
 ## Roadmap
 
-- Node (napi) and WebAssembly bindings, alongside the existing CLI and Python package.
 - An authored path layer, so the reveal direction can be drawn by hand.
-- Zhang and Suen skeleton thinning to refine the spine on thick art.
 
 ## Credits
 

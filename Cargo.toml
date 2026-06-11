@@ -2,10 +2,6 @@
 resolver = "2"
 members = ["crates/inkling", "crates/inkling-cli"]
 
-# inkling-py builds as a Python extension via maturin (it needs a Python
-# interpreter), so it is kept out of the default cargo workspace.
-exclude = ["crates/inkling-py"]
-
-# Future members (more bindings around the same pure core):
-#   crates/inkling-node  Node (napi-rs)
-#   crates/inkling-wasm  browser demo (wasm-bindgen)
+# The language bindings build with their own toolchains and targets (maturin,
+# wasm-pack, napi-rs), so they are kept out of the default cargo workspace.
+exclude = ["crates/inkling-py", "crates/inkling-wasm", "crates/inkling-node"]

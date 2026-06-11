@@ -42,6 +42,15 @@ bar.finish()
 Constructor keywords: `total`, `art`, `art_path`, `rainbow`, `geodesic`, `reading`,
 `message`.
 
+## The inkling family
+
+This is the Python package. The same engine ships three ways:
+
+- **`inkling-loader` on PyPI** (this package), for Python. `pip install inkling-loader`, import as `inkling`.
+- **`inkling-loader`** on crates.io, the Rust library. `cargo add inkling-loader`.
+- **`inkling-cli`**, the `inkling` command, to drive a reveal from any language through a pipe.
+  `cargo install inkling-cli`.
+
 ## Building from source
 
 ```sh

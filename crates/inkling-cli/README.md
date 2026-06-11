@@ -29,4 +29,12 @@ inkling --total 100 --rainbow --art snake.txt < progress.log
 On end of input the art finishes filled. Run `inkling --help` for every flag
 (`--total`, `--art`, `--message`, `--rainbow`, `--geodesic`, `--reading`).
 
+## The inkling family
+
+This crate, `inkling-cli`, installs the `inkling` binary. The same engine ships three ways:
+
+- **`inkling-cli`** (this crate), the command-line tool. `cargo install inkling-cli`.
+- **`inkling-loader`**, the Rust library it is built on. `cargo add inkling-loader`, import as `inkling`.
+- **`inkling-loader` on PyPI**, the Python package. `pip install inkling-loader`.
+
 License: MIT.

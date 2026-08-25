@@ -5,3 +5,6 @@ target/
 
 # VHS recording scripts are local scaffolding; only the rendered GIFs are tracked.
 *.tape
+
+# Generated per-platform napi packages, rebuilt from package.json triples.
+crates/inkling-node/npm/

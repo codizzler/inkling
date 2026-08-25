@@ -110,6 +110,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: crates/inkling-node/artifacts
+      # napi ships one npm package per platform, each with its own package.json
+      # declaring os/cpu/libc, and the main package depends on all of them
+      # optionally. Those directories are generated from the `triples` list
+      # rather than committed, so adding a target cannot silently leave the two
+      # out of step, which is exactly how 0.2.0 shipped seven optional
+      # dependencies that were never published.
+      - run: npx napi create-npm-dir --target .
       # Moves each downloaded binary into npm/<triple>/, which is where
       # prepublish looks for it. Without this step prepublish finds nothing,
       # prints "doesn't exist" for every triple, exits 0 anyway, and publishes a

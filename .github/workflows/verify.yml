@@ -10,8 +10,17 @@ on:
 
 jobs:
   versions:
-    name: tag matches every manifest
+    name: manifests agree
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: scripts/check-versions.sh "${GITHUB_REF_NAME}"
+      # On a tag, the tag has to match the manifests too. On a manual dry run
+      # there is no tag to compare against, so check only that the manifests
+      # agree with each other.
+      - name: Check versions
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            scripts/check-versions.sh "${GITHUB_REF_NAME}"
+          else
+            scripts/check-versions.sh
+          fi

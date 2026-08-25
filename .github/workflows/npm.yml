@@ -4,6 +4,12 @@ name: npm
 # npm. One-time setup: add an npm automation token as the repo secret NPM_TOKEN
 # (npmjs.com -> Access Tokens -> Generate -> Automation).
 #
+# It can also be run manually from the Actions tab. That builds every platform
+# binary and the wasm package but publishes nothing, so a new target can be
+# proven before a version number is spent on it: registry versions are
+# immutable, and a build that fails after its siblings have shipped leaves the
+# packages out of step.
+#
 # The Node job follows the standard napi-rs flow (one prebuilt binary per
 # platform, tied together by optionalDependencies). The WASM job is a single,
 # platform-independent package.
@@ -16,6 +22,7 @@ name: npm
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   verify:
@@ -69,6 +76,8 @@ jobs:
   node-publish:
     name: publish node to npm
     needs: node-build
+    # Only a tag publishes. A manual run stops after the builds above.
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       id-token: write # npm trusted publishing (OIDC), once it is configured
@@ -95,8 +104,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ---- WebAssembly package (wasm-pack) ----
-  wasm-publish:
-    name: publish wasm to npm
+  wasm-build:
+    name: wasm package
     needs: [verify, ci]
     runs-on: ubuntu-latest
     permissions:
@@ -113,7 +122,10 @@ jobs:
       - uses: jetli/wasm-pack-action@v0.4.0
       - run: wasm-pack build --target web --release
         working-directory: crates/inkling-wasm
-      - run: npm publish --access public
+      # The build above runs on a manual dry run too; only the publish is gated.
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm publish --access public
         working-directory: crates/inkling-wasm/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

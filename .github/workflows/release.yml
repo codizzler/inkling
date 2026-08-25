@@ -3,6 +3,10 @@ name: Release
 # Pushing a version tag (for example v0.2.0) publishes to crates.io using Trusted
 # Publishing (OIDC), so there is no long-lived token stored in the repo.
 #
+# It can also be run manually from the Actions tab, which packages the crate the
+# way crates.io will but uploads nothing, so a packaging mistake surfaces before
+# a version number is spent on it.
+#
 # One-time setup, per crate, on crates.io (after that crate's first manual
 # publish so the name exists): crate -> Settings -> Trusted Publishing -> add
 # this repository, workflow "release.yml", environment "crates-io".
@@ -10,6 +14,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   verify:
@@ -20,8 +25,23 @@ jobs:
   ci:
     uses: ./.github/workflows/ci.yml
 
+  package:
+    name: package check (dry run)
+    needs: [verify, ci]
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Builds the .crate exactly as crates.io would receive it, so an excluded
+      # file the build actually needs fails here rather than after upload. Only
+      # the library: inkling-cli depends on it by registry version, which cannot
+      # resolve until the library is actually published.
+      - run: cargo publish -p inkling-loader --dry-run --locked
+
   publish:
     needs: [verify, ci]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: crates-io
     permissions:

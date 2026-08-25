@@ -17,10 +17,15 @@ jobs:
       # On a tag, the tag has to match the manifests too. On a manual dry run
       # there is no tag to compare against, so check only that the manifests
       # agree with each other.
+      #
+      # Invoked through `sh` rather than executed directly: the repository is
+      # developed on Windows, where core.filemode is off, so the executable bit
+      # is easy to drop on a later commit without noticing. The gate that stops
+      # a bad release should not itself depend on a mode bit.
       - name: Check versions
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            scripts/check-versions.sh "${GITHUB_REF_NAME}"
+            sh scripts/check-versions.sh "${GITHUB_REF_NAME}"
           else
-            scripts/check-versions.sh
+            sh scripts/check-versions.sh
           fi

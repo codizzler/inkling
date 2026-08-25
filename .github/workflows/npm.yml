@@ -1,8 +1,21 @@
 name: npm
 
 # Pushing a version tag publishes the Node addon and the WebAssembly package to
-# npm. One-time setup: add an npm automation token as the repo secret NPM_TOKEN
-# (npmjs.com -> Access Tokens -> Generate -> Automation).
+# npm. One-time setup: add a granular access token as the repo secret NPM_TOKEN
+# (npmjs.com -> Access Tokens -> Generate New Token). Legacy "classic" tokens,
+# including the Automation type older guides name, were removed in November
+# 2025, so two settings on the granular token do that job instead:
+#
+#   * Packages and scopes: Read and write on *All packages*. Scoping it to a
+#     selected list cannot create a package that does not exist yet, and npm
+#     reports that as a 404 on PUT rather than a permission error.
+#   * Bypass 2FA: enabled. It defaults to off, and without it every publish
+#     fails with EOTP asking for a one-time password no runner can supply.
+#
+# npm's own recommendation for CI is trusted publishing (OIDC), which needs no
+# token at all; `id-token: write` is already granted below for it. It requires
+# configuring a publisher per package on npmjs.com, so it is worth moving to
+# once the platform packages exist.
 #
 # It can also be run manually from the Actions tab. That builds every platform
 # binary and the wasm package but publishes nothing, so a new target can be
@@ -158,6 +171,81 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Everything above can pass while the published package does not work. It has,
+  # for three releases: the addon shipped with optionalDependencies naming
+  # platform packages that were never created, so `npm install` succeeded and
+  # `require()` threw. The only check that would have caught it is installing
+  # the thing from the registry, on a machine that built none of it, and calling
+  # into it. That is this job.
+  smoke:
+    name: install from npm and run it (${{ matrix.os }})
+    needs: node-publish
+    if: needs.node-publish.result == 'success' && github.event_name != 'pull_request'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install the published addon and load it
+        shell: bash
+        run: |
+          version=$(curl -fsSL https://registry.npmjs.org/inkling-loader             | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)['dist-tags'].latest))")
+          echo "testing inkling-loader@${version}"
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          npm init -y >/dev/null
+          # The registry needs a moment after a publish before the new platform
+          # packages resolve.
+          for attempt in 1 2 3 4 5; do
+            if npm install "inkling-loader@${version}"; then break; fi
+            echo "attempt ${attempt} failed, retrying in 15s"
+            sleep 15
+          done
+          node -e "
+            const { Loader } = require('inkling-loader');
+            const bar = new Loader({ total: 4, art: '####' });
+            bar.inc(2);
+            if (bar.position !== 2) { throw new Error('position was ' + bar.position); }
+            bar.finishAndClear();
+            console.log('native binding loaded and ran');
+          "
+
+  # Alpine has no prebuilt-binary fallback either, and musl is the triple most
+  # likely to be missing, so it gets checked in a real musl container.
+  smoke-musl:
+    name: install from npm and run it (alpine)
+    needs: node-publish
+    if: needs.node-publish.result == 'success' && github.event_name != 'pull_request'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    container: node:20-alpine
+    steps:
+      - name: Install the published addon and load it
+        shell: sh
+        run: |
+          apk add --no-cache curl >/dev/null
+          version=$(curl -fsSL https://registry.npmjs.org/inkling-loader             | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)['dist-tags'].latest))")
+          echo "testing inkling-loader@${version} on musl"
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          npm init -y >/dev/null
+          for attempt in 1 2 3 4 5; do
+            if npm install "inkling-loader@${version}"; then break; fi
+            echo "attempt ${attempt} failed, retrying in 15s"
+            sleep 15
+          done
+          node -e "
+            const { Loader } = require('inkling-loader');
+            const bar = new Loader({ total: 4, art: '####' });
+            bar.inc(2);
+            if (bar.position !== 2) { throw new Error('position was ' + bar.position); }
+            bar.finishAndClear();
+            console.log('native binding loaded and ran');
+          "
 
   # ---- WebAssembly package (wasm-pack) ----
   wasm-build:

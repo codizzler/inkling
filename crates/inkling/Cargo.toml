@@ -5,10 +5,11 @@ edition = "2021"
 rust-version = "1.74"
 authors = ["Cody Taylor"]
 description = "Reveal arbitrary ASCII art as a progress indicator by choosing the order its glyphs appear."
+homepage = "https://codytaylor.dev/inkling"
 repository = "https://github.com/codizzler/inkling"
 license = "MIT"
 readme = "README.md"
-keywords = ["progress", "ascii", "terminal", "tui", "animation"]
+keywords = ["progress", "progress-bar", "ascii-art", "terminal", "animation"]
 categories = ["command-line-interface", "visualization"]
 exclude = ["/assets/inkling3d.txt"]
 

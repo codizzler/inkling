@@ -4,7 +4,18 @@
   "description": "Reveal ASCII art as a progress indicator, from Node, on the inkling engine.",
   "license": "MIT",
   "repository": "github:codizzler/inkling",
-  "keywords": ["progress", "ascii", "terminal", "loader", "cli"],
+  "keywords": [
+    "progress",
+    "progress-bar",
+    "ascii-art",
+    "terminal",
+    "cli",
+    "loader",
+    "spinner",
+    "animation",
+    "napi-rs",
+    "native"
+  ],
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
@@ -32,5 +43,6 @@
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.0"
-  }
+  },
+  "homepage": "https://codytaylor.dev/inkling"
 }

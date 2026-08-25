@@ -4,9 +4,10 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.74"
 description = "Reveal ASCII art from progress piped on stdin: the language-agnostic inkling bridge."
+homepage = "https://codytaylor.dev/inkling"
 repository = "https://github.com/codizzler/inkling"
 license = "MIT"
-keywords = ["progress", "cli", "ascii", "loader", "pipe"]
+keywords = ["progress", "progress-bar", "ascii-art", "cli", "pipe"]
 categories = ["command-line-utilities", "visualization"]
 readme = "README.md"
 

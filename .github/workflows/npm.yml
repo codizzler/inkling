@@ -89,9 +89,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Publishing wants a current npm (>= 11.5 for OIDC trusted
+          # publishing), and current npm no longer runs on Node 20. The build
+          # jobs above stay on 20, which is all napi needs.
+          node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm install -g npm@latest # OIDC trusted publishing needs npm >= 11.5
+      - run: npm install -g npm@latest
       - run: npm install
       - uses: actions/download-artifact@v4
         with:
@@ -115,17 +118,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm install -g npm@latest # OIDC trusted publishing needs npm >= 11.5
       - uses: dtolnay/rust-toolchain@stable
       - uses: jetli/wasm-pack-action@v0.4.0
       - run: wasm-pack build --target web --release
         working-directory: crates/inkling-wasm
-      # The build above runs on a manual dry run too; only the publish is gated.
+      # The build above runs on a manual dry run too. Everything npm touches is
+      # gated on a tag, so a dry run never needs a registry at all.
       - name: Publish to npm
         if: startsWith(github.ref, 'refs/tags/v')
-        run: npm publish --access public
+        run: |
+          npm install -g npm@latest   # OIDC trusted publishing needs npm >= 11.5
+          npm publish --access public
         working-directory: crates/inkling-wasm/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

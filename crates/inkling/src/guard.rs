@@ -16,6 +16,10 @@
 //! is tracked by two flags rather than assumed, so a session that only hid the
 //! cursor does not also get an alternate-screen exit it never asked for.
 
+// Only the non-unix writers go through `std::io`; the unix one writes to fd 1
+// directly, because `write` is async-signal-safe and `println!`-style buffering
+// is not.
+#[cfg(not(unix))]
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Once;
@@ -99,7 +103,9 @@ fn install_signal_handler() {
         // SAFETY: `handler` is async-signal-safe (one `write`, then it restores the
         // default disposition and re-raises so the process dies as it normally would).
         unsafe {
-            libc::signal(signal, handler as libc::sighandler_t);
+            // Through a pointer rather than straight to an integer: casting a
+            // function item to an integer is a lint in recent toolchains.
+            libc::signal(signal, handler as *const () as libc::sighandler_t);
         }
     }
 }

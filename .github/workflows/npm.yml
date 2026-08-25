@@ -45,7 +45,9 @@ jobs:
           # are where the "no prebuilt binary" reports come from.
           - { host: ubuntu-latest, target: x86_64-unknown-linux-musl, musl: true }
           - { host: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, musl: true }
-          - { host: macos-13, target: x86_64-apple-darwin }
+          # Cross compiled from the ARM runner: macos-13 has been retired and
+          # the replacement Intel labels are paid larger runners.
+          - { host: macos-latest, target: x86_64-apple-darwin }
           - { host: macos-latest, target: aarch64-apple-darwin }
           - { host: windows-latest, target: x86_64-pc-windows-msvc }
     runs-on: ${{ matrix.host }}

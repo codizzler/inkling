@@ -4,7 +4,7 @@ Reveal ASCII art as a progress indicator, from Python. Same engine as the Rust c
 exposed as a tiny extension built with [PyO3](https://pyo3.rs). It installs as
 `inkling-loader` and imports as `inkling`.
 
-![The geodesic reveal tracing a serpent along its spine](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-geodesic.gif)
+![Inkling revealing ASCII art in rainbow as a task runs](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
 
 ```sh
 pip install inkling-loader

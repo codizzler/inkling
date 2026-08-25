@@ -4,7 +4,7 @@
 
 [Repository](https://github.com/codizzler/inkling) · [Docs](https://docs.rs/inkling-loader)
 
-![The geodesic reveal tracing a serpent along its spine](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-geodesic.gif)
+![Inkling revealing ASCII art in rainbow as a task runs](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
 
 Inkling maps progress onto the order a picture's glyphs appear. A normal bar fills a line;
 Inkling paints a drawing, one glyph at a time, as your task runs.

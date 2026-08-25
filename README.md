@@ -1,14 +1,6 @@
 <div align="center">
 
-<pre>
-      ::::::::::: ::::    ::: :::    ::: :::        ::::::::::: ::::    :::  :::::::: 
-         :+:     :+:+:   :+: :+:   :+:  :+:            :+:     :+:+:   :+: :+:    :+: 
-        +:+     :+:+:+  +:+ +:+  +:+   +:+            +:+     :+:+:+  +:+ +:+         
-       +#+     +#+ +:+ +#+ +#++:++    +#+            +#+     +#+ +:+ +#+ :#:          
-      +#+     +#+  +#+#+# +#+  +#+   +#+            +#+     +#+  +#+#+# +#+   +#+#    
-     #+#     #+#   #+#+# #+#   #+#  #+#            #+#     #+#   #+#+# #+#    #+#     
-########### ###    #### ###    ### ########## ########### ###    ####  ########       
-</pre>
+# Inkling
 
 **Reveal ASCII art as a progress indicator.**
 
@@ -29,7 +21,7 @@ line; Inkling paints a drawing, one glyph at a time, as your task runs. The name
 literal: the engine calls every non blank glyph *ink*, and an inkling is something
 slowly taking shape.
 
-![The geodesic reveal tracing a serpent along its spine](docs/demo-geodesic.gif)
+![Inkling revealing ASCII art in rainbow as a task runs](docs/demo-hero.gif)
 
 <sub>Rust · zero dependency core · Windows, macOS, Linux</sub>
 
@@ -289,7 +281,6 @@ command way to capture them with `vhs`.
 | ![geodesic](docs/demo-geodesic.gif) | The geodesic spine trace painting a serpent along its body |
 | ![dragon](docs/demo-dragon.gif) | The default directional wipe, glow palette, painting a dragon top to bottom |
 | ![rainbow](docs/demo-rainbow.gif) | The rainbow (lolcat) palette |
-| ![hero](docs/demo-hero.gif) | The logo revealed as a simulated download |
 
 ## Roadmap
 

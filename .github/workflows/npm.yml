@@ -23,6 +23,17 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to npm using the version in the manifests (recovery for a half-finished release)"
+        type: boolean
+        default: false
+
+# A tag publishes. A manual run only builds, unless it is explicitly asked to
+# publish, which is the escape hatch for finishing a release that landed the
+# main package without its platform packages.
+env:
+  PUBLISH: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.publish) && 'true' || 'false' }}
 
 jobs:
   verify:
@@ -76,10 +87,8 @@ jobs:
           path: crates/inkling-node/*.node
 
   node-publish:
-    name: publish node to npm
+    name: assemble and publish node to npm
     needs: node-build
-    # Only a tag publishes. A manual run stops after the builds above.
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       id-token: write # npm trusted publishing (OIDC), once it is configured
@@ -101,10 +110,45 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: crates/inkling-node/artifacts
-      - run: npx napi prepublish -t npm --skip-gh-release
+      # Moves each downloaded binary into npm/<triple>/, which is where
+      # prepublish looks for it. Without this step prepublish finds nothing,
+      # prints "doesn't exist" for every triple, exits 0 anyway, and publishes a
+      # main package whose optionalDependencies all point at packages that were
+      # never created. The addon then installs fine and fails at require time.
+      - run: npx napi artifacts
+      # Assembly runs on a dry run too, so the listing below is the proof that a
+      # release will have something to publish. Empty directories here mean a
+      # broken release, and this is the only place that is visible before the
+      # one-way door.
+      - name: Show what will be published
+        run: |
+          ls -R npm
+          missing=0
+          for dir in npm/*/; do
+            if ! ls "$dir"*.node >/dev/null 2>&1; then
+              echo "::error::no binary staged for ${dir}"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Publish the platform packages
+        if: env.PUBLISH == 'true'
+        run: npx napi prepublish -t npm --skip-gh-release
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: npm publish --access public
+      # Re-runnable: the platform packages above may need to land for a version
+      # whose main package is already on the registry, which is exactly the
+      # state a half-finished release leaves behind.
+      - name: Publish the main package
+        if: env.PUBLISH == 'true'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "inkling-loader@${version}" version >/dev/null 2>&1; then
+            echo "inkling-loader@${version} is already on the registry, skipping"
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -129,10 +173,15 @@ jobs:
       # The build above runs on a manual dry run too. Everything npm touches is
       # gated on a tag, so a dry run never needs a registry at all.
       - name: Publish to npm
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.PUBLISH == 'true'
         run: |
           npm install -g npm@latest   # OIDC trusted publishing needs npm >= 11.5
-          npm publish --access public
+          version=$(node -p "require('./package.json').version")
+          if npm view "inkling-wasm@${version}" version >/dev/null 2>&1; then
+            echo "inkling-wasm@${version} is already on the registry, skipping"
+          else
+            npm publish --access public
+          fi
         working-directory: crates/inkling-wasm/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

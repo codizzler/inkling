@@ -11,7 +11,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! inkling-loader = "0.1"
+//! inkling-loader = "0.2"
 //! ```
 //!
 //! It publishes as `inkling-loader` (the short name was taken) but imports as `inkling`.
@@ -20,10 +20,11 @@
 //!
 //! ## Quick start
 //!
-//! The easy front door is [`Loader`](loader::Loader): make one with a total,
+//! The easy front door is [`Loader`]: make one with a total,
 //! advance it from anywhere, and a living reveal paints itself until you finish.
 //!
 //! ```no_run
+//! # #[cfg(feature = "terminal")] {
 //! use inkling::prelude::*;
 //!
 //! let loader = Loader::new(100);
@@ -32,16 +33,19 @@
 //!     loader.inc(1);
 //! }
 //! loader.finish();
+//! # }
 //! ```
 //!
 //! Or wrap any iterator and forget about it:
 //!
 //! ```no_run
+//! # #[cfg(feature = "terminal")] {
 //! use inkling::prelude::*;
 //!
 //! for _item in (0..100).inkling() {
 //!     // ... work ...
 //! }
+//! # }
 //! ```
 //!
 //! ## The one idea
@@ -67,13 +71,26 @@
 //! let frame = inkling::frame::to_string(&art, &ranks, 0.5);
 //! assert_eq!(frame.lines().count(), art.height() as usize);
 //! ```
+//!
+//! ## Features
+//!
+//! | Feature | Default | What it adds |
+//! | --- | --- | --- |
+//! | `terminal` | yes | The live renderer: [`Loader`], [`render::Reveal`], colour. Pulls in `crossterm`. |
+//! | `unicode` | yes | Real display widths for CJK and emoji, via `unicode-width`. |
+//!
+//! With neither, the core ([`art`], [`rank`], [`ordering`], [`easing`],
+//! [`frame`], [`width`]) is pure `std` with no dependencies at all.
 
 pub mod art;
 pub mod easing;
 pub mod frame;
 pub mod ordering;
 pub mod rank;
+pub mod width;
 
+#[cfg(feature = "terminal")]
+mod guard;
 #[cfg(feature = "terminal")]
 pub mod loader;
 #[cfg(feature = "terminal")]
@@ -83,9 +100,12 @@ pub use art::Art;
 pub use easing::Easing;
 pub use ordering::Ordering;
 pub use rank::RankMap;
+pub use width::glyph_cols;
 
 #[cfg(feature = "terminal")]
 pub use loader::{Handle, Loader, ProgressIteratorExt};
+#[cfg(feature = "terminal")]
+pub use render::{ColorDepth, Palette, Style};
 
 /// The handful of imports most programs want, in one glob:
 /// `use inkling::prelude::*;`.
@@ -95,5 +115,5 @@ pub use loader::{Handle, Loader, ProgressIteratorExt};
 pub mod prelude {
     pub use crate::Art;
     #[cfg(feature = "terminal")]
-    pub use crate::{Handle, Loader, ProgressIteratorExt};
+    pub use crate::{Handle, Loader, ProgressIteratorExt, Style};
 }

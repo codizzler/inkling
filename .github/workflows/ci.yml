@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Release tags gate on this workflow, so it has to be callable from one.
+  workflow_call:
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,12 +15,28 @@ jobs:
     name: test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace --all-features
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features --locked
+
+  core:
+    name: zero dependency core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Build *and* test without defaults: the core is the crate's headline
+      # promise, so it gets the same scrutiny as the terminal layer.
+      - run: cargo build -p inkling-loader --no-default-features --locked
+      - run: cargo test -p inkling-loader --no-default-features --locked
+      # `unicode` alone (the wasm binding's feature set) is a real shipped combo.
+      - run: cargo test -p inkling-loader --no-default-features --features unicode --locked
 
   lint:
     name: fmt and clippy
@@ -28,19 +46,38 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      # The zero-dependency path has its own cfg-gated code; lint it too.
+      - run: cargo clippy -p inkling-loader --no-default-features --all-targets --locked -- -D warnings
 
-  core:
-    name: zero dependency core builds
+  msrv:
+    name: msrv (1.74)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build -p inkling-loader --no-default-features
+      # Declared in Cargo.toml as rust-version. Untested, it rots on the first
+      # accidental use of a newer std method; this job is the tripwire.
+      - uses: dtolnay/rust-toolchain@1.74
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-features --locked
+      - run: cargo check -p inkling-loader --no-default-features --locked
 
-  binding:
-    name: python binding compiles
+  docs:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    env:
+      # Catch broken intra-doc links before docs.rs renders them.
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --all-features --no-deps --locked
+
+  bindings:
+    name: bindings compile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +85,24 @@ jobs:
         with:
           python-version: "3.x"
       - uses: dtolnay/rust-toolchain@stable
-      # inkling-py is excluded from the workspace (it builds as a Python
-      # extension), so check it on its own manifest to keep it from rotting.
-      - run: cargo check --manifest-path crates/inkling-py/Cargo.toml
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      # All three bindings are excluded from the cargo workspace (they build
+      # with maturin, wasm-pack and napi-rs), so nothing checks them unless it
+      # is done explicitly. These are exactly the crates that break silently.
+      - name: python
+        run: cargo check --manifest-path crates/inkling-py/Cargo.toml --locked
+      - name: wasm
+        run: cargo check --manifest-path crates/inkling-wasm/Cargo.toml --target wasm32-unknown-unknown --locked
+      - name: node
+        run: cargo check --manifest-path crates/inkling-node/Cargo.toml --locked
+
+  audit:
+    name: advisories and licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources

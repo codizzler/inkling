@@ -36,13 +36,15 @@ fn main() {
     let GeodesicReport {
         ink_cells,
         connected_cells,
+        skeleton_cells,
+        pieces,
         spine_length,
     } = ordering.diagnose(&art);
     let ranks = ordering.rank(&art);
 
     eprintln!(
-        "inkling · {ink_cells} ink cells · {connected_cells} on the spine \
-         ({:.0}% connected) · spine length {spine_length}",
+        "inkling · {ink_cells} ink cells ({:.0}% 8-connected) · \
+         {skeleton_cells}-cell skeleton in {pieces} piece(s) · spine {spine_length}",
         100.0 * connected_cells as f32 / ink_cells.max(1) as f32,
     );
 

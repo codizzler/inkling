@@ -4,7 +4,7 @@ Reveal ASCII art as a progress indicator, from Python. Same engine as the Rust c
 exposed as a tiny extension built with [PyO3](https://pyo3.rs). It installs as
 `inkling-loader` and imports as `inkling`.
 
-![inkling](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
+![The geodesic reveal tracing a serpent along its spine](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-geodesic.gif)
 
 ```sh
 pip install inkling-loader
@@ -31,16 +31,40 @@ for chunk in response:
 bar.finish()
 ```
 
+Log while the reveal is live. `println` puts a line above the art and redraws beneath it,
+so nothing lands in the middle of the drawing:
+
+```python
+with Loader(total=len(files), geodesic=True) as bar:
+    for path in files:
+        if check(path):
+            bar.println(f"ok {path}")
+        bar.inc()
+```
+
+The package ships `py.typed` and full type stubs, so editors and type checkers see the
+whole surface rather than an opaque native module.
+
 | Method | Effect |
 | --- | --- |
 | `inc(delta=1)` | advance the position |
 | `set(pos)` | set the absolute position |
 | `set_length(total)` | change the total |
 | `set_message(text)` | caption beneath the art |
+| `println(line)` | print a line above the live reveal |
 | `finish()` / `finish_and_clear()` | finish, keeping or erasing the art |
 
-Constructor keywords: `total`, `art`, `art_path`, `rainbow`, `geodesic`, `reading`,
-`message`.
+| Property | Value |
+| --- | --- |
+| `position`, `length` | current and total units of work |
+| `elapsed` | seconds since the loader started |
+| `rate` | average units per second |
+| `eta` | estimated seconds remaining, or `None` |
+
+Constructor keywords: `total`, `art`, `art_path`, `ordering` (`"auto"`, `"geodesic"`,
+`"scanline"`, `"reading"`, `"ltr"`, `"rtl"`), the shorthands `rainbow`, `geodesic` and
+`reading`, plus `light`, `color`, `head`, `body`, `feather`, `easing`, `start`, `bridge`,
+and `message`.
 
 ## The inkling family
 

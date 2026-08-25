@@ -1,14 +1,16 @@
 [package]
 name = "inkling-loader"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.74"
+authors = ["Cody Taylor"]
 description = "Reveal arbitrary ASCII art as a progress indicator by choosing the order its glyphs appear."
 repository = "https://github.com/codizzler/inkling"
 license = "MIT"
 readme = "README.md"
 keywords = ["progress", "ascii", "terminal", "tui", "animation"]
 categories = ["command-line-interface", "visualization"]
+exclude = ["/assets/inkling3d.txt"]
 
 # Published as `inkling-loader` (the short name `inkling` is taken), but imported as `inkling`.
 [lib]
@@ -17,14 +19,42 @@ name = "inkling"
 # Document every feature on docs.rs, not just the defaults.
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+# Every example drives a live terminal, so none of them build without the
+# `terminal` feature. Declaring that lets `cargo test --no-default-features`
+# exercise the zero-dependency core instead of failing on the examples.
+[[example]]
+name = "download"
+required-features = ["terminal"]
+
+[[example]]
+name = "dragon"
+required-features = ["terminal"]
+
+[[example]]
+name = "loader"
+required-features = ["terminal"]
 
 [features]
-default = ["terminal"]
-# The core (art, rank, ordering, easing, frame) is pure std with zero
-# dependencies. Only the live terminal renderer pulls in crossterm (and
-# unicode-width, for aligning wide glyphs).
-terminal = ["dep:crossterm", "dep:unicode-width"]
+default = ["terminal", "unicode"]
+# The core (art, rank, ordering, easing, frame, width) is pure std with zero
+# dependencies. Only the live terminal renderer pulls in crossterm.
+terminal = ["dep:crossterm", "dep:libc"]
+# Real East Asian display widths, so CJK and emoji art stays aligned. Without it
+# every glyph counts as one column, which is exact for plain ASCII.
+unicode = ["dep:unicode-width"]
 
 [dependencies]
-crossterm = { version = "0.28", optional = true }
+# `events` (a default) drags in mio, signal-hook and parking_lot for an input
+# reader this crate never uses; the renderer only needs cursor, style and size.
+# `windows` stays on: crossterm refuses to build for Windows without it.
+crossterm = { version = "0.28", optional = true, default-features = false, features = [
+    "windows",
+] }
 unicode-width = { version = "0.1", optional = true }
+
+# One `write` to fd 1 from the signal handler that restores the terminal on
+# Ctrl+C. Already in the tree on unix; Windows uses kernel32 directly.
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }

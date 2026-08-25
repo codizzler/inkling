@@ -1,6 +1,6 @@
 [package]
 name = "inkling-wasm"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.74"
 description = "WebAssembly bindings for inkling: reveal ASCII art as a progress indicator in the browser."
@@ -20,5 +20,9 @@ crate-type = ["cdylib"]
 # otherwise shadow the dependency. The browser has no terminal, so we pull in only
 # the pure, dependency-free core (no crossterm).
 [dependencies]
-inkling-core = { package = "inkling-loader", path = "../inkling", default-features = false }
+# `unicode` but not `terminal`: the browser has no terminal, but display widths
+# still matter for laying out a canvas or a monospace grid.
+inkling-core = { package = "inkling-loader", path = "../inkling", default-features = false, features = [
+    "unicode",
+] }
 wasm-bindgen = "0.2"

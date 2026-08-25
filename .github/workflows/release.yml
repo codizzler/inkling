@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a version tag (for example v0.1.0) publishes to crates.io using Trusted
+# Pushing a version tag (for example v0.2.0) publishes to crates.io using Trusted
 # Publishing (OIDC), so there is no long-lived token stored in the repo.
 #
 # One-time setup, per crate, on crates.io (after that crate's first manual
@@ -12,7 +12,16 @@ on:
     tags: ["v*"]
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  # A tag must never publish code that has not been tested. Reusing the CI
+  # workflow means the release gate is exactly the same gate main is held to.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: [verify, ci]
     runs-on: ubuntu-latest
     environment: crates-io
     permissions:
@@ -24,10 +33,28 @@ jobs:
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
       - name: Publish inkling-loader
-        run: cargo publish -p inkling-loader
+        run: cargo publish -p inkling-loader --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      # inkling-cli depends on inkling-loader by registry version, and the
+      # crates.io index does not update instantly. Publishing straight after
+      # fails intermittently, so wait for the index to actually carry the
+      # version we just pushed.
+      - name: Wait for the index to carry inkling-loader
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/inkling/Cargo.toml | head -n 1)
+          for attempt in $(seq 1 30); do
+            if curl -sSf "https://index.crates.io/in/kl/inkling-loader" \
+              | grep -q "\"vers\":\"${version}\""; then
+              echo "inkling-loader ${version} is in the index"
+              exit 0
+            fi
+            echo "attempt ${attempt}: not indexed yet, retrying in 10s"
+            sleep 10
+          done
+          echo "inkling-loader ${version} never appeared in the index" >&2
+          exit 1
       - name: Publish inkling-cli
-        run: cargo publish -p inkling-cli
+        run: cargo publish -p inkling-cli --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

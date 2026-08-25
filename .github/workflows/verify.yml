@@ -1,0 +1,17 @@
+name: Verify release
+
+# Reusable pre-flight for every publishing workflow. A tag push fans out to
+# crates.io, PyPI and npm in parallel; each of them calls this first so a
+# mistyped tag or a half-bumped set of manifests fails before anything is
+# uploaded to a registry, where it cannot be taken back.
+
+on:
+  workflow_call:
+
+jobs:
+  versions:
+    name: tag matches every manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/check-versions.sh "${GITHUB_REF_NAME}"

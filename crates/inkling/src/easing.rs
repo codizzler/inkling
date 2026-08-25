@@ -1,7 +1,8 @@
 //! Easing functions map linear time `0..=1` onto eased progress `0..=1`.
 //!
 //! Easing shapes *how progress moves over time*; it is independent of the
-//! [`RankMap`], which decides *where* a given progress value reveals.
+//! [`RankMap`](crate::RankMap), which decides *where* a given progress value
+//! reveals.
 
 /// A timing curve. Input and output are both clamped to `0..=1`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]

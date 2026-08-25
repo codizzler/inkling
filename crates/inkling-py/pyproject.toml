@@ -28,3 +28,10 @@ Repository = "https://github.com/codizzler/inkling"
 # `cargo check` stays an ordinary interpreter-linked build.
 features = ["pyo3/extension-module"]
 module-name = "inkling"
+
+# Ship the type stubs and the PEP 561 marker alongside the extension, so editors
+# and type checkers see the full signature rather than an opaque native module.
+include = [
+    { path = "inkling.pyi", format = ["sdist", "wheel"] },
+    { path = "py.typed", format = ["sdist", "wheel"] },
+]

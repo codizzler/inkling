@@ -14,23 +14,29 @@ pub trait Ordering {
     fn rank(&self, art: &Art) -> RankMap;
 }
 
+/// Evenly spaced ranks over `count` cells, so the first is `0.0` and the last
+/// `1.0` with no dead zone at either end.
+#[inline]
+fn even_step(count: usize) -> f32 {
+    count.saturating_sub(1).max(1) as f32
+}
+
 // ---------------------------------------------------------------------------
 // Scanline, the trivial geometric baseline.
 // ---------------------------------------------------------------------------
 
 /// Reveal in reading order: top-to-bottom, left-to-right.
 ///
-/// The dullest possible ordering, included as a baseline and as a deterministic
-/// tie-breaker for richer strategies.
+/// The dullest possible ordering, included as a baseline and as a reference
+/// implementation of the [`Ordering`] trait.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Scanline;
 
 impl Ordering for Scanline {
     fn rank(&self, art: &Art) -> RankMap {
         let mut map = RankMap::new(art.width(), art.height());
-        let cells: Vec<_> = art.ink_cells().collect();
-        let denom = cells.len().saturating_sub(1).max(1) as f32;
-        for (i, cell) in cells.iter().enumerate() {
+        let denom = even_step(art.ink_count());
+        for (i, cell) in art.ink_cells().enumerate() {
             map.set(cell.x, cell.y, i as f32 / denom);
         }
         map
@@ -72,22 +78,73 @@ impl Default for Directional {
 }
 
 impl Directional {
-    /// Left to right, or right to left under a right-to-left locale (read from
-    /// `LC_ALL` or `LANG`), so the wipe follows the reader's eye.
-    pub fn reading() -> Self {
-        let rtl = std::env::var("LC_ALL")
-            .or_else(|_| std::env::var("LANG"))
-            .map(|l| {
-                let l = l.to_ascii_lowercase();
-                ["ar", "he", "fa", "ur"].iter().any(|p| l.starts_with(p))
-            })
-            .unwrap_or(false);
-        Directional(if rtl {
-            Direction::RightToLeft
-        } else {
-            Direction::LeftToRight
-        })
+    /// Left to right: the wipe follows a left-to-right reader's eye.
+    pub fn ltr() -> Self {
+        Directional(Direction::LeftToRight)
     }
+
+    /// Right to left, for Arabic, Hebrew, Persian, and Urdu layouts.
+    pub fn rtl() -> Self {
+        Directional(Direction::RightToLeft)
+    }
+
+    /// Wipe along the reading direction of the user's locale, so it follows the
+    /// reader's eye. Falls back to [`ltr`](Self::ltr) when the locale cannot be
+    /// determined.
+    ///
+    /// The locale comes from `LC_ALL` or `LANG` where those are set, and from the
+    /// user's default locale on Windows, where they usually are not. Call
+    /// [`ltr`](Self::ltr) or [`rtl`](Self::rtl) directly when your program already
+    /// knows its own text direction; that is always more reliable than sniffing.
+    pub fn reading() -> Self {
+        if locale_is_rtl() {
+            Self::rtl()
+        } else {
+            Self::ltr()
+        }
+    }
+}
+
+/// Language subtags written right to left.
+const RTL_LANGS: [&str; 4] = ["ar", "he", "fa", "ur"];
+
+fn locale_is_rtl() -> bool {
+    let tagged = |l: &str| {
+        let l = l.to_ascii_lowercase();
+        RTL_LANGS.iter().any(|p| l.starts_with(p))
+    };
+    if let Ok(l) = std::env::var("LC_ALL").or_else(|_| std::env::var("LANG")) {
+        return tagged(&l);
+    }
+    system_locale().map(|l| tagged(&l)).unwrap_or(false)
+}
+
+/// The user's default locale name, where the platform exposes one outside the
+/// environment. Windows does not set `LANG`, so without this every Windows user
+/// would be treated as left-to-right regardless of how their system is set up.
+#[cfg(windows)]
+fn system_locale() -> Option<String> {
+    // Declared directly rather than pulled from a crate: the core carries no
+    // dependencies, and this is one documented call into kernel32, which std
+    // already links.
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetUserDefaultLocaleName(name: *mut u16, capacity: i32) -> i32;
+    }
+
+    // LOCALE_NAME_MAX_LENGTH is 85 wide chars.
+    let mut buf = [0u16; 85];
+    // SAFETY: the buffer outlives the call and its true capacity is passed.
+    let len = unsafe { GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
+    if len <= 1 {
+        return None; // 0 on failure; 1 is just the trailing NUL
+    }
+    String::from_utf16(&buf[..len as usize - 1]).ok()
+}
+
+#[cfg(not(windows))]
+fn system_locale() -> Option<String> {
+    None
 }
 
 impl Ordering for Directional {
@@ -98,12 +155,12 @@ impl Ordering for Directional {
         // sideways when it is genuinely wide, more than twice as many columns as
         // rows; otherwise paint top to bottom, which is the intuitive read.
         let dir = match self.0 {
-            Direction::Auto if w as u32 > 2 * h as u32 => Direction::LeftToRight,
+            Direction::Auto if is_wide(w, h) => Direction::LeftToRight,
             Direction::Auto => Direction::TopToBottom,
             other => other,
         };
-        let dx = w.saturating_sub(1).max(1) as f32;
-        let dy = h.saturating_sub(1).max(1) as f32;
+        let dx = even_step(w as usize);
+        let dy = even_step(h as usize);
         let mut map = RankMap::new(w, h);
         for cell in art.ink_cells() {
             let rank = match dir {
@@ -116,6 +173,13 @@ impl Ordering for Directional {
         }
         map
     }
+}
+
+/// True when the art reads as wide rather than tall, correcting for terminal
+/// cells being roughly twice as tall as they are wide.
+#[inline]
+fn is_wide(w: u16, h: u16) -> bool {
+    w as u32 > 2 * h as u32
 }
 
 // ---------------------------------------------------------------------------
@@ -145,9 +209,10 @@ pub struct Geodesic {
     /// Which tip of the spine the reveal begins from.
     pub start: StartHint,
     /// The largest gap, in blank cells, the spine may step across. Bridging only
-    /// engages when the art is actually fragmented (see [`Spine::solve`]), so it
-    /// stitches the separate strokes of hand-drawn ASCII into one body without ever
-    /// adding shortcuts to art that was already connected. `0` disables it.
+    /// engages when the art is actually fragmented (see [`STRICT_CONNECTED_MIN`]),
+    /// so it stitches the separate strokes of hand-drawn ASCII into one body
+    /// without ever adding shortcuts to art that was already connected. `0`
+    /// disables it.
     pub bridge: u16,
 }
 
@@ -176,32 +241,54 @@ pub enum StartHint {
 
 /// Diagnostics describing how well a piece of art suits geodesic reveal.
 ///
-/// A low `connected_cells / ink_cells` ratio means the art is fragmented and
-/// will lean on the Voronoi inheritance rather than the spine itself.
-#[derive(Clone, Copy, Debug)]
+/// Every field describes the structure the reveal actually follows. A low
+/// `connected_cells / ink_cells` ratio means the ink is fragmented and the reveal
+/// leans on the Voronoi inheritance; a `pieces` count above 1 means the skeleton
+/// broke into strokes that are painted one after another.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GeodesicReport {
+    /// Total ink cells in the art.
     pub ink_cells: usize,
-    /// Size of the largest connected component (the spine's component).
+    /// Size of the largest strictly 8-connected component of the *ink*.
     pub connected_cells: usize,
-    /// Length of the spine in cells (the component's graph diameter).
+    /// Cells remaining after thinning, i.e. the length of the drawn centerline.
+    pub skeleton_cells: usize,
+    /// Separate pieces the skeleton breaks into once bridging has been applied.
+    /// Each is traced in turn, in reading order along the dominant axis.
+    pub pieces: usize,
+    /// Longest geodesic through the largest skeleton piece, in cells: the spine
+    /// the reveal actually traces.
     pub spine_length: u32,
 }
 
 impl Geodesic {
     /// Inspect the art without building a full rank map.
     pub fn diagnose(&self, art: &Art) -> GeodesicReport {
-        let mask = ink_mask(art);
-        match Spine::solve(&mask, art.width(), art.height(), self.start, self.bridge) {
-            Some(spine) => GeodesicReport {
-                ink_cells: art.ink_count(),
-                connected_cells: spine.dist.iter().filter(|d| d.is_some()).count(),
-                spine_length: spine.diameter,
-            },
-            None => GeodesicReport {
+        let (w, h) = (art.width(), art.height());
+        let ink = ink_mask(art);
+        let ink_cells = ink.iter().filter(|&&m| m).count();
+        if ink_cells == 0 {
+            return GeodesicReport {
                 ink_cells: 0,
                 connected_cells: 0,
+                skeleton_cells: 0,
+                pieces: 0,
                 spine_length: 0,
-            },
+            };
+        }
+
+        let connected_cells = largest_component(&ink, w, h, 0).map_or(0, |(size, _)| size);
+        let skel = skeletonize(art);
+        let skeleton_cells = skel.iter().filter(|&&m| m).count();
+        let bridge = adaptive_bridge(&skel, w, h, self.bridge);
+
+        GeodesicReport {
+            ink_cells,
+            connected_cells,
+            skeleton_cells,
+            pieces: components(&skel, w, h, bridge).len(),
+            spine_length: spine(&skel, w, h, self.start, self.bridge)
+                .map_or(0, |trace| trace.diameter),
         }
     }
 }
@@ -224,7 +311,7 @@ impl Ordering for Geodesic {
         // step with the part of the spine it hangs from; and where the skeleton is a
         // mere dot (a solid blob) the distance term spreads the fill out from the
         // middle rather than all at once.
-        let mut val = value.clone();
+        let mut val = value;
         let mut depth = vec![0u32; val.len()];
         let mut queue: VecDeque<usize> = (0..val.len()).filter(|&i| !val[i].is_nan()).collect();
         while let Some(cur) = queue.pop_front() {
@@ -248,7 +335,7 @@ impl Ordering for Geodesic {
             })
             .collect();
         order.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.3.cmp(&b.3)));
-        let denom = order.len().saturating_sub(1).max(1) as f32;
+        let denom = even_step(order.len());
         for (i, &(x, y, _, _)) in order.iter().enumerate() {
             map.set(x, y, i as f32 / denom);
         }
@@ -257,60 +344,65 @@ impl Ordering for Geodesic {
 }
 
 /// If the largest strictly 8-connected component covers at least this fraction of
-/// the ink, the art is treated as already whole and traced without bridging.
-const STRICT_CONNECTED_MIN: f32 = 0.6;
+/// the mask, it is treated as already whole and traced without bridging.
+pub const STRICT_CONNECTED_MIN: f32 = 0.6;
 
-/// The traced spine of the art's largest connected component.
-struct Spine {
-    /// Geodesic distance from the chosen start within the largest component;
-    /// `None` for every cell outside it.
+// ---------------------------------------------------------------------------
+// Tracing. One implementation, shared by the whole-art spine and the per-piece
+// walk inside `skeleton_values`, so the two can never disagree about what a
+// "trace" means.
+// ---------------------------------------------------------------------------
+
+/// A traced piece: geodesic distance from the chosen start tip to every cell it
+/// reaches, and the piece's diameter.
+struct Trace {
+    /// Distance from the start; `None` for every cell outside the piece.
     dist: Vec<Option<u32>>,
-    /// The component's diameter (maximum geodesic distance).
+    /// The piece's diameter (its maximum geodesic distance).
     diameter: u32,
 }
 
-impl Spine {
-    fn solve(mask: &[bool], w: u16, h: u16, hint: StartHint, bridge: u16) -> Option<Self> {
-        // If the mask is already mostly one 8-connected piece, trace it strictly;
-        // only stitch gaps when it is genuinely fragmented. Bridging then fixes
-        // hand-drawn art split into strokes without adding shortcuts across art
-        // that was already whole (which would shorten the spine and cut corners).
-        let count = mask.iter().filter(|&&m| m).count();
-        let strict_seed = largest_component_seed(mask, w, h, 0)?;
-        let strict_size = bfs(mask, w, h, strict_seed, 0)
-            .0
-            .iter()
-            .filter(|d| d.is_some())
-            .count();
-        let bridge = if (strict_size as f32) < STRICT_CONNECTED_MIN * count.max(1) as f32 {
-            bridge
-        } else {
-            0
-        };
+/// Trace the piece containing `seed` tip to tip: a double breadth-first sweep
+/// finds the two ends `(a, b)` of its longest geodesic, then `hint` picks which
+/// end the reveal starts from.
+fn trace(mask: &[bool], w: u16, h: u16, seed: usize, hint: StartHint, bridge: u16) -> Trace {
+    let (_, far_a) = bfs(mask, w, h, seed, bridge);
+    let (dist_a, far_b) = bfs(mask, w, h, far_a, bridge);
+    let (dist_b, _) = bfs(mask, w, h, far_b, bridge);
 
-        // Double sweep → the two ends (A, B) of the component's longest geodesic.
-        let seed = if bridge == 0 {
-            strict_seed
-        } else {
-            largest_component_seed(mask, w, h, bridge)?
-        };
-        let (_, far_a) = bfs(mask, w, h, seed, bridge);
-        let (dist_a, far_b) = bfs(mask, w, h, far_a, bridge);
-        let (dist_b, _) = bfs(mask, w, h, far_b, bridge);
+    let coord = |i: usize| ((i % w as usize) as u16, (i / w as usize) as u16);
+    let (ax, ay) = coord(far_a);
+    let (bx, by) = coord(far_b);
+    let start_is_a = match hint {
+        StartHint::Topological => true,
+        StartHint::TopLeft => (ay, ax) <= (by, bx),
+        StartHint::Bottom => ay >= by,
+    };
 
-        // Pick which endpoint to start from.
-        let coord = |i: usize| ((i % w as usize) as u16, (i / w as usize) as u16);
-        let (ax, ay) = coord(far_a);
-        let (bx, by) = coord(far_b);
-        let start_is_a = match hint {
-            StartHint::Topological => true,
-            StartHint::TopLeft => (ay, ax) <= (by, bx),
-            StartHint::Bottom => ay >= by,
-        };
+    let dist = if start_is_a { dist_a } else { dist_b };
+    let diameter = dist.iter().flatten().copied().max().unwrap_or(0);
+    Trace { dist, diameter }
+}
 
-        let dist = if start_is_a { dist_a } else { dist_b };
-        let diameter = dist.iter().flatten().copied().max().unwrap_or(0);
-        Some(Spine { dist, diameter })
+/// Trace the largest piece of `mask` tip to tip, bridging only if it is genuinely
+/// fragmented. `None` when the mask is empty.
+fn spine(mask: &[bool], w: u16, h: u16, hint: StartHint, bridge: u16) -> Option<Trace> {
+    let bridge = adaptive_bridge(mask, w, h, bridge);
+    let (_, seed) = largest_component(mask, w, h, bridge)?;
+    Some(trace(mask, w, h, seed, hint, bridge))
+}
+
+/// Bridging engages only when the mask is actually fragmented. Stitching gaps in
+/// art that was already whole would add shortcuts straight across the body,
+/// shortening the spine and cutting corners on the trace.
+fn adaptive_bridge(mask: &[bool], w: u16, h: u16, bridge: u16) -> u16 {
+    if bridge == 0 {
+        return 0;
+    }
+    let count = mask.iter().filter(|&&m| m).count();
+    match largest_component(mask, w, h, 0) {
+        Some((strict, _)) if strict as f32 >= STRICT_CONNECTED_MIN * count.max(1) as f32 => 0,
+        _ => bridge,
     }
 }
 
@@ -320,55 +412,83 @@ impl Spine {
 
 /// The in-bounds 8-neighbours of a flat grid index.
 fn neighbours(index: usize, w: u16, h: u16) -> impl Iterator<Item = usize> {
-    let (w, h) = (w as i32, h as i32);
-    let (cx, cy) = ((index as i32 % w), (index as i32 / w));
-    (-1..=1)
-        .flat_map(move |dy| (-1..=1).map(move |dx| (dx, dy)))
+    offsets(index, w, h, 0)
+}
+
+/// In-bounds neighbours within Chebyshev distance `bridge + 1` of `index`, so
+/// `bridge = 0` is plain 8-connectivity. Lazy: this sits in the inner loop of
+/// every sweep, and materialising a `Vec` per node expansion was the single
+/// hottest allocation in the crate.
+fn offsets(index: usize, w: u16, h: u16, bridge: u16) -> impl Iterator<Item = usize> {
+    let (wi, hi) = (w as i32, h as i32);
+    let r = bridge as i32 + 1;
+    let (cx, cy) = (index as i32 % wi.max(1), index as i32 / wi.max(1));
+    (-r..=r)
+        .flat_map(move |dy| (-r..=r).map(move |dx| (dx, dy)))
         .filter_map(move |(dx, dy)| {
             if dx == 0 && dy == 0 {
                 return None;
             }
             let (nx, ny) = (cx + dx, cy + dy);
-            (nx >= 0 && ny >= 0 && nx < w && ny < h).then_some((ny * w + nx) as usize)
+            (nx >= 0 && ny >= 0 && nx < wi && ny < hi).then_some((ny * wi + nx) as usize)
         })
+}
+
+/// Member cells within Chebyshev distance `bridge + 1` of `index`.
+#[inline]
+fn bridged_neighbours(
+    mask: &[bool],
+    w: u16,
+    h: u16,
+    index: usize,
+    bridge: u16,
+) -> impl Iterator<Item = usize> + '_ {
+    offsets(index, w, h, bridge).filter(move |&ni| mask[ni])
 }
 
 /// A boolean grid: `true` where the art has ink.
 fn ink_mask(art: &Art) -> Vec<bool> {
     let (w, h) = (art.width() as usize, art.height() as usize);
     (0..w * h)
-        .map(|i| art.is_ink((i % w) as u16, (i / w) as u16))
+        .map(|i| art.is_ink((i % w.max(1)) as u16, (i / w.max(1)) as u16))
         .collect()
 }
 
-/// A seed cell in the largest component of `mask` (`None` if empty). With
-/// `bridge > 0` a component spans gaps of that many blank cells.
-fn largest_component_seed(mask: &[bool], w: u16, h: u16, bridge: u16) -> Option<usize> {
-    let mut visited = vec![false; mask.len()];
+/// Every connected component of `mask`, each as its list of cells, in the order
+/// their first cell appears. With `bridge > 0` a component spans gaps of that many
+/// blank cells.
+fn components(mask: &[bool], w: u16, h: u16, bridge: u16) -> Vec<Vec<usize>> {
+    let mut seen = vec![false; mask.len()];
     let mut queue = VecDeque::new();
-    let mut best: Option<(usize, usize)> = None; // (size, seed)
+    let mut out = Vec::new();
 
     for seed in 0..mask.len() {
-        if !mask[seed] || visited[seed] {
+        if !mask[seed] || seen[seed] {
             continue;
         }
-        let mut size = 0usize;
-        visited[seed] = true;
+        let mut cells = Vec::new();
+        seen[seed] = true;
         queue.push_back(seed);
         while let Some(cur) = queue.pop_front() {
-            size += 1;
+            cells.push(cur);
             for ni in bridged_neighbours(mask, w, h, cur, bridge) {
-                if !visited[ni] {
-                    visited[ni] = true;
+                if !seen[ni] {
+                    seen[ni] = true;
                     queue.push_back(ni);
                 }
             }
         }
-        if best.map_or(true, |(best_size, _)| size > best_size) {
-            best = Some((size, seed));
-        }
+        out.push(cells);
     }
-    best.map(|(_, seed)| seed)
+    out
+}
+
+/// The size of, and a seed cell in, the largest component of `mask`.
+fn largest_component(mask: &[bool], w: u16, h: u16, bridge: u16) -> Option<(usize, usize)> {
+    components(mask, w, h, bridge)
+        .into_iter()
+        .map(|c| (c.len(), c[0]))
+        .max_by_key(|&(size, _)| size)
 }
 
 /// BFS from `source` over `mask`, stepping across gaps of up to `bridge` blank
@@ -396,30 +516,6 @@ fn bfs(mask: &[bool], w: u16, h: u16, source: usize, bridge: u16) -> (Vec<Option
         }
     }
     (dist, farthest)
-}
-
-/// Member cells within Chebyshev distance `bridge + 1` of `index`, so `bridge = 0`
-/// is plain 8-connectivity and larger values let a trace step across small gaps.
-fn bridged_neighbours(mask: &[bool], w: u16, h: u16, index: usize, bridge: u16) -> Vec<usize> {
-    let (wi, hi) = (w as i32, h as i32);
-    let r = bridge as i32 + 1;
-    let (cx, cy) = (index as i32 % wi, index as i32 / wi);
-    let mut out = Vec::new();
-    for dy in -r..=r {
-        for dx in -r..=r {
-            if dx == 0 && dy == 0 {
-                continue;
-            }
-            let (nx, ny) = (cx + dx, cy + dy);
-            if nx >= 0 && ny >= 0 && nx < wi && ny < hi {
-                let ni = (ny * wi + nx) as usize;
-                if mask[ni] {
-                    out.push(ni);
-                }
-            }
-        }
-    }
-    out
 }
 
 /// Zhang-Suen thinning: reduce the ink to a one-cell-wide skeleton, its medial
@@ -485,57 +581,17 @@ fn skeletonize(art: &Art) -> Vec<bool> {
 }
 
 /// A reveal value for every skeleton cell. Each connected piece of the skeleton is
-/// traced tip to tip (geodesic distance), and the pieces are ordered along the
-/// art's dominant axis, so a multi-letter logo paints letter by letter in reading
-/// order while a single shape just traces its centerline. `NaN` off the skeleton.
+/// traced tip to tip, and the pieces are ordered along the art's dominant axis, so
+/// a multi-letter logo paints letter by letter in reading order while a single
+/// shape just traces its centerline. `NaN` off the skeleton.
 fn skeleton_values(skel: &[bool], w: u16, h: u16, hint: StartHint, bridge: u16) -> Vec<f32> {
     let mut value = vec![f32::NAN; skel.len()];
-    let count = skel.iter().filter(|&&m| m).count();
-    if count == 0 {
+    if !skel.iter().any(|&m| m) {
         return value;
     }
 
-    // Adaptive bridge: stitch a fragmented skeleton, but never add shortcuts to one
-    // that is already whole (which would cut corners on the trace).
-    let bridge = match largest_component_seed(skel, w, h, 0) {
-        Some(seed)
-            if bfs(skel, w, h, seed, 0)
-                .0
-                .iter()
-                .filter(|d| d.is_some())
-                .count() as f32
-                >= STRICT_CONNECTED_MIN * count as f32 =>
-        {
-            0
-        }
-        _ => bridge,
-    };
-
-    // Label connected components.
-    let mut comp_id = vec![usize::MAX; skel.len()];
-    let mut comps: Vec<Vec<usize>> = Vec::new();
-    for i in 0..skel.len() {
-        if !skel[i] || comp_id[i] != usize::MAX {
-            continue;
-        }
-        let id = comps.len();
-        let mut cells = Vec::new();
-        let mut queue = VecDeque::new();
-        comp_id[i] = id;
-        queue.push_back(i);
-        while let Some(cur) = queue.pop_front() {
-            cells.push(cur);
-            for ni in bridged_neighbours(skel, w, h, cur, bridge) {
-                if comp_id[ni] == usize::MAX {
-                    comp_id[ni] = id;
-                    queue.push_back(ni);
-                }
-            }
-        }
-        comps.push(cells);
-    }
-
-    let horizontal = w as u32 > 2 * h as u32;
+    let bridge = adaptive_bridge(skel, w, h, bridge);
+    let horizontal = is_wide(w, h);
     let axis = |i: usize| -> u16 {
         if horizontal {
             (i % w as usize) as u16
@@ -543,37 +599,23 @@ fn skeleton_values(skel: &[bool], w: u16, h: u16, hint: StartHint, bridge: u16) 
             (i / w as usize) as u16
         }
     };
-    let coord = |i: usize| ((i % w as usize) as u16, (i / w as usize) as u16);
 
     // Trace each piece, and note its leading edge along the axis for ordering.
-    let mut pieces: Vec<(u16, Vec<(usize, f32)>)> = comps
-        .iter()
+    let mut pieces: Vec<(u16, Vec<usize>, Trace)> = components(skel, w, h, bridge)
+        .into_iter()
         .map(|comp| {
-            let (_, far_a) = bfs(skel, w, h, comp[0], bridge);
-            let (dist_a, far_b) = bfs(skel, w, h, far_a, bridge);
-            let (dist_b, _) = bfs(skel, w, h, far_b, bridge);
-            let (ax, ay) = coord(far_a);
-            let (bx, by) = coord(far_b);
-            let start_is_a = match hint {
-                StartHint::Topological => true,
-                StartHint::TopLeft => (ay, ax) <= (by, bx),
-                StartHint::Bottom => ay >= by,
-            };
-            let dist = if start_is_a { dist_a } else { dist_b };
-            let diameter = dist.iter().flatten().copied().max().unwrap_or(0).max(1) as f32;
             let lead = comp.iter().map(|&c| axis(c)).min().unwrap_or(0);
-            let within = comp
-                .iter()
-                .map(|&c| (c, dist[c].map_or(0.0, |d| d as f32 / diameter)))
-                .collect();
-            (lead, within)
+            let traced = trace(skel, w, h, comp[0], hint, bridge);
+            (lead, comp, traced)
         })
         .collect();
 
-    pieces.sort_by_key(|(lead, _)| *lead);
-    for (piece, (_, within)) in pieces.iter().enumerate() {
-        for &(cell, w) in within {
-            value[cell] = piece as f32 + w;
+    pieces.sort_by_key(|(lead, _, _)| *lead);
+    for (index, (_, comp, traced)) in pieces.iter().enumerate() {
+        let span = traced.diameter.max(1) as f32;
+        for &cell in comp {
+            let within = traced.dist[cell].map_or(0.0, |d| d as f32 / span);
+            value[cell] = index as f32 + within;
         }
     }
     value
@@ -629,6 +671,41 @@ mod tests {
         assert_eq!(report.connected_cells, 10); // the bar; the '.' is an island
     }
 
+    /// `spine_length` must describe the skeleton the reveal actually traces, not
+    /// the raw ink: a thick bar thins to a centerline, and that centerline is what
+    /// the trace walks.
+    #[test]
+    fn diagnose_reports_the_traced_skeleton() {
+        let art = Art::parse(&"##########\n".repeat(3));
+        let report = Geodesic::default().diagnose(&art);
+        assert_eq!(report.ink_cells, 30);
+        assert_eq!(report.connected_cells, 30);
+        assert!(
+            report.skeleton_cells < report.ink_cells,
+            "thinning should shrink the ink: {report:?}"
+        );
+        assert_eq!(report.pieces, 1);
+        assert!(
+            (report.spine_length as usize) < report.ink_cells,
+            "spine must be the centerline, not the ink: {report:?}"
+        );
+    }
+
+    #[test]
+    fn diagnose_counts_pieces() {
+        let art = Art::parse("##        ##        ##");
+        let report = Geodesic::default().diagnose(&art);
+        assert_eq!(report.pieces, 3);
+    }
+
+    #[test]
+    fn diagnose_of_empty_art_is_all_zero() {
+        let report = Geodesic::default().diagnose(&Art::parse("   \n   "));
+        assert_eq!(report.ink_cells, 0);
+        assert_eq!(report.spine_length, 0);
+        assert_eq!(report.pieces, 0);
+    }
+
     /// Fragmented art (two strokes one blank cell apart) reveals as one body: the
     /// default bridges the gap, while `bridge: 0` keeps the strokes separate.
     #[test]
@@ -638,8 +715,8 @@ mod tests {
             start: StartHint::TopLeft,
             bridge: 0,
         };
-        assert_eq!(strict.diagnose(&art).connected_cells, 2);
-        assert_eq!(Geodesic::default().diagnose(&art).connected_cells, 4);
+        assert_eq!(strict.diagnose(&art).pieces, 2);
+        assert_eq!(Geodesic::default().diagnose(&art).pieces, 1);
     }
 
     /// Already-connected art must not be bridged: shortcuts would cut across the
@@ -651,6 +728,7 @@ mod tests {
         let art = Art::parse("####\n   #\n####\n#\n####");
         let report = Geodesic::default().diagnose(&art);
         assert_eq!(report.connected_cells, report.ink_cells);
+        assert_eq!(report.pieces, 1);
         assert!(
             report.spine_length >= 9,
             "spine was {}",
@@ -739,5 +817,108 @@ mod tests {
             rw.rank_at(0, 1),
             "same column reveals together"
         );
+    }
+
+    /// Padding must not steer the `Auto` heuristic. A one-column vertical bar is
+    /// tall art however much blank space surrounds it, so it wipes top to bottom
+    /// and the two cells never share a rank.
+    #[test]
+    fn padding_does_not_steer_auto() {
+        let padded = Directional(Direction::Auto).rank(&Art::parse("      #\n      #"));
+        let bare = Directional(Direction::Auto).rank(&Art::parse("#\n#"));
+        assert_eq!(padded.rank_at(0, 0), bare.rank_at(0, 0));
+        assert_eq!(padded.rank_at(0, 0), Some(0.0));
+        assert_eq!(padded.rank_at(0, 1), Some(1.0));
+    }
+
+    #[test]
+    fn explicit_direction_beats_locale_sniffing() {
+        let art = Art::parse("abcd");
+        let ltr = Directional::ltr().rank(&art);
+        let rtl = Directional::rtl().rank(&art);
+        assert_eq!(ltr.rank_at(0, 0), Some(0.0));
+        assert_eq!(rtl.rank_at(3, 0), Some(0.0));
+    }
+
+    #[test]
+    fn scanline_spans_the_whole_bar() {
+        let art = Art::parse("ab\ncd");
+        let r = Scanline.rank(&art);
+        assert_eq!(r.rank_at(0, 0), Some(0.0));
+        assert_eq!(r.rank_at(1, 1), Some(1.0));
+    }
+
+    /// Share of the ink visible at `progress`.
+    fn revealed_share(art: &Art, ranks: &RankMap, progress: f32) -> f32 {
+        let mut seen = 0usize;
+        for y in 0..art.height() {
+            for x in 0..art.width() {
+                if art.is_ink(x, y) && ranks.visible_at(x, y, progress) {
+                    seen += 1;
+                }
+            }
+        }
+        seen as f32 / art.ink_count().max(1) as f32
+    }
+
+    /// A reveal has to read as a progress bar: the share of ink on screen tracks
+    /// the reported fraction. Individually valid ranks can still add up to a
+    /// reveal that dumps half the picture at the start or stalls at the end, and
+    /// on real art (dense in some rows, sparse in others) that is exactly what a
+    /// naive rank assignment does. This pins the behaviour on the art that
+    /// actually ships, under every ordering.
+    #[test]
+    fn revealed_share_tracks_progress_on_the_bundled_art() {
+        let art = [
+            ("dragon", Art::parse(include_str!("../assets/dragon.txt"))),
+            ("serpent", Art::parse(include_str!("../assets/serpent.txt"))),
+            ("inkling", Art::parse(include_str!("../assets/inkling.txt"))),
+        ];
+        for (name, art) in &art {
+            // Scanline ranks cells one by one, and Geodesic ends in a rank
+            // transform, so both track the bar exactly. Directional is a
+            // geometric wipe: it ranks by position, knows nothing about where
+            // the ink is dense, and on the dragon (a sparse crest over a solid
+            // body) it is legitimately behind at the halfway mark. That is the
+            // ordering's character, not a defect, but it still must not lurch.
+            let maps: [(&str, RankMap, f32); 3] = [
+                ("directional", Directional::default().rank(art), 0.2),
+                ("geodesic", Geodesic::default().rank(art), 0.02),
+                ("scanline", Scanline.rank(art), 0.02),
+            ];
+            for (ordering, ranks, tolerance) in maps {
+                let at = |p| revealed_share(art, &ranks, p);
+                assert!(
+                    at(0.0) < 0.02,
+                    "{name}/{ordering}: {:.0}% of the ink is already showing at zero",
+                    at(0.0) * 100.0
+                );
+                for p in [0.25f32, 0.5, 0.75] {
+                    let share = at(p);
+                    assert!(
+                        (share - p).abs() < tolerance,
+                        "{name}/{ordering}: {:.0}% of the ink revealed at {:.0}% progress",
+                        share * 100.0,
+                        p * 100.0
+                    );
+                }
+                assert!(
+                    at(1.0) > 0.999,
+                    "{name}/{ordering}: the art never finishes filling"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn orderings_tolerate_empty_art() {
+        let art = Art::parse("");
+        for map in [
+            Scanline.rank(&art),
+            Directional::default().rank(&art),
+            Geodesic::default().rank(&art),
+        ] {
+            assert_eq!(map.ink_count(), 0);
+        }
     }
 }

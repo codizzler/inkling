@@ -4,7 +4,7 @@
 
 [Repository](https://github.com/codizzler/inkling) · [Docs](https://docs.rs/inkling-loader)
 
-![Inkling revealing ASCII art in rainbow as a task runs](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-hero.gif)
+![The geodesic reveal tracing a serpent along its spine](https://raw.githubusercontent.com/codizzler/inkling/main/docs/demo-geodesic.gif)
 
 Inkling maps progress onto the order a picture's glyphs appear. A normal bar fills a line;
 Inkling paints a drawing, one glyph at a time, as your task runs.
@@ -13,7 +13,7 @@ Published as `inkling-loader` because the short name is taken; the import path i
 
 ```toml
 [dependencies]
-inkling-loader = "0.1"
+inkling-loader = "0.2"
 ```
 
 ```rust
@@ -30,8 +30,14 @@ loader.finish();
 
 A background thread repaints a live reveal at about 30 fps, inline in the terminal. Updates
 are lock free, so any thread can report progress. Wrap an iterator or a reader and it advances
-itself; without a total, `Loader::spinner()` runs an indeterminate reveal. Off a TTY it prints
-the finished art once instead of animating, so the same code is correct in a pipe or in CI.
+itself; without a total, `Loader::spinner()` runs an indeterminate reveal. `println` and
+`suspend` let you log or prompt around a live reveal, and `elapsed`, `rate` and `eta` report
+the pace. Off a TTY it prints the finished art once instead of animating, so the same code is
+correct in a pipe or in CI.
+
+The terminal is restored on finish, on drop, on panic, and on Ctrl+C. Drawing is clipped to
+the viewport on both axes, wide glyphs hold their columns whether revealed or hidden, and
+colour degrades onto 256- and 16-colour terminals rather than assuming truecolor.
 
 ## How it reveals
 
@@ -41,9 +47,10 @@ pure function of progress. The one pluggable seam is the `Ordering` trait: `Dire
 clean wipe, the default), `Geodesic` (trace the spine, so a serpent paints tip to tail), or
 your own.
 
-The core (`art`, `rank`, `ordering`, `easing`, `frame`) is pure `std` with zero dependencies
-and builds with `--no-default-features`. Only the live terminal renderer pulls in
-[`crossterm`](https://crates.io/crates/crossterm), behind the default `terminal` feature.
+The core (`art`, `rank`, `ordering`, `easing`, `width`, `frame`) is pure `std` with zero
+dependencies and builds with `--no-default-features`. Only the live terminal renderer pulls in
+[`crossterm`](https://crates.io/crates/crossterm), behind the default `terminal` feature, and
+only the parts of it this crate uses. Minimum supported Rust version: **1.74**.
 
 ## The inkling family
 
@@ -64,4 +71,4 @@ community at [asciiart.eu](https://www.asciiart.eu/).
 
 ## License
 
-MIT. See [LICENSE-MIT](https://github.com/codizzler/inkling/blob/main/LICENSE-MIT).
+MIT. See [LICENSE](https://github.com/codizzler/inkling/blob/main/LICENSE).

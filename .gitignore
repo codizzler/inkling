@@ -8,3 +8,6 @@ target/
 
 # Generated per-platform napi packages, rebuilt from package.json triples.
 crates/inkling-node/npm/
+
+# npm install output; the bindings are built in CI.
+node_modules/

@@ -112,8 +112,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { host: ubuntu-latest, target: x86_64-unknown-linux-musl, interp: ld-musl-x86_64 }
-          - { host: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, interp: ld-musl-aarch64 }
+          - { host: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { host: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
     runs-on: ${{ matrix.host }}
     container: node:20-alpine
     defaults:
@@ -135,19 +135,23 @@ jobs:
       - run: npx napi build --platform --release
         env:
           RUSTFLAGS: -C target-feature=-crt-static
-      - name: Prove the binary is really musl
+      - name: Prove the binary carries no glibc linkage
         run: |
           binary=$(ls *.node)
           echo "checking $binary"
-          if grep -aq 'ld-linux' "$binary"; then
-            echo "::error::$binary is linked against the glibc loader, not musl"
+          # A shared object has no program interpreter, so unlike an executable
+          # it never names a loader; requiring an ld-musl reference here would
+          # fail on a perfectly good build. What actually marked 0.2.1 as a
+          # glibc build was the opposite: a DT_NEEDED on the glibc loader and
+          # versioned GLIBC_ symbols. A musl build has neither.
+          if grep -aq 'ld-linux' "$binary" || grep -aq 'GLIBC_' "$binary"; then
+            echo "::error::$binary carries glibc references; it is not a musl build"
+            grep -aoE 'ld-linux[^ ]*|GLIBC_[0-9.]+' "$binary" | sort -u | head
             exit 1
           fi
-          grep -aq '${{ matrix.interp }}' "$binary" || {
-            echo "::error::$binary does not reference the musl loader"
-            exit 1
-          }
-          echo "ok: musl-linked"
+          echo "libc references:"
+          grep -aoE 'libc\.[a-z0-9_.-]+|libgcc[a-z0-9_.-]*' "$binary" | sort -u | head || true
+          echo "ok: no glibc linkage"
       - uses: actions/upload-artifact@v4
         with:
           name: node-${{ matrix.target }}

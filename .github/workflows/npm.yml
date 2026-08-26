@@ -115,16 +115,15 @@ jobs:
           - { host: ubuntu-latest, target: x86_64-unknown-linux-musl }
           - { host: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
     runs-on: ${{ matrix.host }}
-    container: node:20-alpine
-    defaults:
-      run:
-        working-directory: crates/inkling-node
     steps:
-      - name: Install a musl-native Rust toolchain
-        run: apk add --no-cache git build-base rust cargo
-        working-directory: /
       - uses: actions/checkout@v4
-      - run: npm install
+      # Deliberately not a `container:` job. GitHub cannot run JavaScript
+      # actions, checkout included, inside an Alpine container on an arm64
+      # runner: "JavaScript Actions in Alpine containers are only supported on
+      # x64 Linux runners." So the checkout stays on the host and only the build
+      # is containerised. Docker picks the image matching the runner's
+      # architecture, so one command serves both.
+      #
       # No --target: inside Alpine the host triple is already musl (Alpine calls
       # it x86_64-alpine-linux-musl), so naming x86_64-unknown-linux-musl asks
       # for a std that is not installed. napi reads the platform from Node,
@@ -132,10 +131,20 @@ jobs:
       #
       # A cdylib cannot be statically linked, and musl defaults to crt-static,
       # so it has to be switched off for the addon to be loadable at all.
-      - run: npx napi build --platform --release
-        env:
-          RUSTFLAGS: -C target-feature=-crt-static
+      - name: Build inside Alpine
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work/crates/inkling-node \
+            -e RUSTFLAGS='-C target-feature=-crt-static' \
+            node:20-alpine sh -c '
+              set -e
+              apk add --no-cache build-base rust cargo
+              npm install
+              npx napi build --platform --release
+            '
+          sudo chown -R "$(id -u):$(id -g)" crates/inkling-node
       - name: Prove the binary carries no glibc linkage
+        working-directory: crates/inkling-node
         run: |
           binary=$(ls *.node)
           echo "checking $binary"

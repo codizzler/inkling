@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "inkling-loader"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "crossterm",
  "libc",
@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "inkling-py"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "inkling-loader",
  "pyo3",

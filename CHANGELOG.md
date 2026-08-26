@@ -6,6 +6,38 @@ All notable changes to Inkling are recorded here. The format follows
 repository (`inkling-loader`, `inkling-cli`, the Python, Node and WASM bindings) shares
 one version number and is released together.
 
+## [0.2.1] - 2026-08-25
+
+Repairs the Node addon on npm. The engine is byte for byte the 0.2.0 release;
+every package is republished together so one version number still describes the
+whole project.
+
+### Fixed
+
+- **`npm install inkling-loader` now works.** The 0.2.0 tarball had no
+  `index.js`, though `package.json` named it as `main`, so `require()` threw
+  with no native binding. That file is the loader napi emits beside each
+  binary, and it is what picks the right platform package at runtime; only the
+  build jobs produced it, and only the `.node` files were uploaded, so the
+  publish job never had it.
+- **The published package is 16 KB instead of 5.6 MB.** With no `files` field
+  npm shipped the whole working directory: `src/lib.rs`, `Cargo.toml`,
+  `build.rs`, and a second copy of all seven platform binaries.
+- **The seven per-platform packages exist.** They were declared as optional
+  dependencies from 0.1.4 onward but never created, which is why the addon has
+  never worked when installed from the registry.
+
+### Infrastructure
+
+- The npm workflow generates the per-platform package directories from the
+  `triples` list rather than relying on committed ones, checks the tarball npm
+  would actually upload, and fails if the entry point is missing or if binaries
+  or sources creep back in.
+- New smoke jobs install the published package from npm on Linux x64 and
+  arm64, macOS, Windows and Alpine, then `require()` it and drive a `Loader`.
+  Every check we had passed on a package that did not work; only installing it
+  catches that.
+
 ## [0.2.0] - 2026-08-25
 
 A correctness and durability pass over the whole workspace. The rank-map model is
@@ -112,6 +144,7 @@ unchanged; almost everything wrapped around it moved.
 - Unicode display width for wide glyphs.
 - `inkling::prelude`.
 
+[0.2.1]: https://github.com/codizzler/inkling/releases/tag/v0.2.1
 [0.2.0]: https://github.com/codizzler/inkling/releases/tag/v0.2.0
 [0.1.5]: https://github.com/codizzler/inkling/releases/tag/v0.1.5
 [0.1.3]: https://github.com/codizzler/inkling/releases/tag/v0.1.3

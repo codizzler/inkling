@@ -1,6 +1,6 @@
 {
   "name": "inkling-loader",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Reveal ASCII art as a progress indicator, from Node, on the inkling engine.",
   "license": "MIT",
   "repository": "github:codizzler/inkling",

@@ -47,6 +47,22 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # A release workflow that does not parse is invisible: GitHub lists it by
+      # path instead of name and refuses to dispatch it, and nothing says why
+      # until a tag is pushed and nothing happens. This job runs on every push,
+      # so a broken workflow file fails here instead.
+      - name: Workflow files parse
+        run: |
+          python -c "
+          import glob, sys, yaml
+          bad = 0
+          for f in sorted(glob.glob('.github/workflows/*.yml')):
+              try:
+                  yaml.safe_load(open(f, encoding='utf-8'))
+                  print('ok  ', f)
+              except Exception as e:
+                  print('FAIL', f, e); bad = 1
+          sys.exit(bad)"
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       # The zero-dependency path has its own cfg-gated code; lint it too.

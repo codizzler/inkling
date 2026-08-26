@@ -167,10 +167,8 @@ jobs:
           # directory instead: every platform binary a second time, plus the
           # Rust source. `files` in package.json fixes the second half; this
           # checks both, against the tarball npm would actually upload.
-          contents=$(npm pack --dry-run --json | node -e "
-            let s='';process.stdin.on('data',d=>s+=d).on('end',()=>
-              console.log(JSON.parse(s)[0].files.map(f=>f.path).join('
-')))")
+          npm pack --dry-run --json > /tmp/pack.json
+          contents=$(node -p "require('/tmp/pack.json')[0].files.map(f => f.path).join(String.fromCharCode(10))")
           echo "$contents"
           for required in index.js index.d.ts; do
             echo "$contents" | grep -qx "$required" || {

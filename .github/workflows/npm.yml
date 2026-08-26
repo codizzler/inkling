@@ -125,9 +125,14 @@ jobs:
         working-directory: /
       - uses: actions/checkout@v4
       - run: npm install
-      # A cdylib cannot be statically linked, and musl targets default to
-      # crt-static, so it has to be switched off for the addon to be loadable.
-      - run: npx napi build --platform --release --target ${{ matrix.target }}
+      # No --target: inside Alpine the host triple is already musl (Alpine calls
+      # it x86_64-alpine-linux-musl), so naming x86_64-unknown-linux-musl asks
+      # for a std that is not installed. napi reads the platform from Node,
+      # which reports musl correctly, and names the output accordingly.
+      #
+      # A cdylib cannot be statically linked, and musl defaults to crt-static,
+      # so it has to be switched off for the addon to be loadable at all.
+      - run: npx napi build --platform --release
         env:
           RUSTFLAGS: -C target-feature=-crt-static
       - name: Prove the binary is really musl

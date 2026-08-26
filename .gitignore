@@ -11,3 +11,11 @@ crates/inkling-node/npm/
 
 # npm install output; the bindings are built in CI.
 node_modules/
+
+# Node addon build output. The binaries are built in CI, one per platform, and
+# published as their own npm packages; index.js is the loader napi emits beside
+# them. None of it belongs in the repository.
+*.node
+crates/inkling-node/artifacts/
+crates/inkling-node/index.js
+crates/inkling-node/index.d.ts

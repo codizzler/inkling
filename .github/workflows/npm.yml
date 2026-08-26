@@ -94,10 +94,17 @@ jobs:
       - run: npx napi build --platform --release --target ${{ matrix.target }}
         env:
           CC: ${{ matrix.musl && 'musl-gcc' || '' }}
+      # index.js and index.d.ts are emitted by the build, next to the binary,
+      # and they are the package's entry point. The publish job does not build,
+      # so it has to get them from here or the published package has a `main`
+      # that points at nothing. They are identical across targets.
       - uses: actions/upload-artifact@v4
         with:
           name: node-${{ matrix.target }}
-          path: crates/inkling-node/*.node
+          path: |
+            crates/inkling-node/*.node
+            crates/inkling-node/index.js
+            crates/inkling-node/index.d.ts
 
   node-publish:
     name: assemble and publish node to npm
@@ -129,6 +136,11 @@ jobs:
       # rather than committed, so adding a target cannot silently leave the two
       # out of step, which is exactly how 0.2.0 shipped seven optional
       # dependencies that were never published.
+      - name: Restore the JS entry point
+        run: |
+          src=$(find artifacts -name index.js | head -n 1)
+          [ -n "$src" ] || { echo "::error::no index.js in any build artifact"; exit 1; }
+          cp "$(dirname "$src")/index.js" "$(dirname "$src")/index.d.ts" .
       - run: npx napi create-npm-dir --target .
       # Moves each downloaded binary into npm/<triple>/, which is where
       # prepublish looks for it. Without this step prepublish finds nothing,
@@ -150,6 +162,26 @@ jobs:
               missing=1
             fi
           done
+          # The main package carries no binary at all, only the loader that
+          # picks one. 0.2.0 shipped without it, and with the whole working
+          # directory instead: every platform binary a second time, plus the
+          # Rust source. `files` in package.json fixes the second half; this
+          # checks both, against the tarball npm would actually upload.
+          contents=$(npm pack --dry-run --json | node -e "
+            let s='';process.stdin.on('data',d=>s+=d).on('end',()=>
+              console.log(JSON.parse(s)[0].files.map(f=>f.path).join('
+')))")
+          echo "$contents"
+          for required in index.js index.d.ts; do
+            echo "$contents" | grep -qx "$required" || {
+              echo "::error::the main package is missing ${required}"
+              missing=1
+            }
+          done
+          if echo "$contents" | grep -qE '\.node$|^artifacts/|^src/'; then
+            echo "::error::the main package is shipping binaries or sources"
+            missing=1
+          fi
           exit "$missing"
 
       - name: Publish the platform packages

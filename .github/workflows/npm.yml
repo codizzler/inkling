@@ -143,24 +143,27 @@ jobs:
               npx napi build --platform --release
             '
           sudo chown -R "$(id -u):$(id -g)" crates/inkling-node
-      - name: Prove the binary carries no glibc linkage
-        working-directory: crates/inkling-node
+      # Read the actual ELF dynamic section rather than grepping for strings.
+      # A GLIBC_ version string can appear in a genuine musl build by way of
+      # libgcc, which made the string heuristic reject a good arm64 binary. What
+      # truly breaks loading on Alpine, and what 0.2.1 shipped, is a NEEDED
+      # entry on the glibc loader or on libc.so.6.
+      - name: Prove the binary links against musl, not glibc
         run: |
-          binary=$(ls *.node)
-          echo "checking $binary"
-          # A shared object has no program interpreter, so unlike an executable
-          # it never names a loader; requiring an ld-musl reference here would
-          # fail on a perfectly good build. What actually marked 0.2.1 as a
-          # glibc build was the opposite: a DT_NEEDED on the glibc loader and
-          # versioned GLIBC_ symbols. A musl build has neither.
-          if grep -aq 'ld-linux' "$binary" || grep -aq 'GLIBC_' "$binary"; then
-            echo "::error::$binary carries glibc references; it is not a musl build"
-            grep -aoE 'ld-linux[^ ]*|GLIBC_[0-9.]+' "$binary" | sort -u | head
-            exit 1
-          fi
-          echo "libc references:"
-          grep -aoE 'libc\.[a-z0-9_.-]+|libgcc[a-z0-9_.-]*' "$binary" | sort -u | head || true
-          echo "ok: no glibc linkage"
+          docker run --rm \
+            -v "$PWD":/work -w /work/crates/inkling-node \
+            node:20-alpine sh -c '
+              set -e
+              apk add --no-cache binutils >/dev/null
+              binary=$(ls *.node)
+              echo "checking $binary"
+              readelf -d "$binary" | grep NEEDED || true
+              if readelf -d "$binary" | grep -qE "ld-linux|libc\.so\.6"; then
+                echo "::error::$binary links against glibc, not musl"
+                exit 1
+              fi
+              echo "ok: no glibc linkage"
+            '
       - uses: actions/upload-artifact@v4
         with:
           name: node-${{ matrix.target }}

@@ -167,8 +167,12 @@ jobs:
           # directory instead: every platform binary a second time, plus the
           # Rust source. `files` in package.json fixes the second half; this
           # checks both, against the tarball npm would actually upload.
-          npm pack --dry-run --json > /tmp/pack.json
-          contents=$(node -p "require('/tmp/pack.json')[0].files.map(f => f.path).join(String.fromCharCode(10))")
+          # Packed for real and read back with tar, rather than parsed out of
+          # `npm pack --json`, whose shape differs between npm 11 and 12. This
+          # inspects the exact bytes npm would upload and depends on no schema.
+          tarball=$(npm pack --silent | tail -n 1)
+          contents=$(tar -tzf "$tarball" | sed 's|^package/||' | grep -v '/$')
+          rm -f "$tarball"
           echo "$contents"
           for required in index.js index.d.ts; do
             echo "$contents" | grep -qx "$required" || {

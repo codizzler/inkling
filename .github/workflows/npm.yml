@@ -65,10 +65,6 @@ jobs:
         include:
           - { host: ubuntu-latest, target: x86_64-unknown-linux-gnu }
           - { host: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
-          # musl, built natively on each arch against musl-gcc. Alpine images
-          # are where the "no prebuilt binary" reports come from.
-          - { host: ubuntu-latest, target: x86_64-unknown-linux-musl, musl: true }
-          - { host: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, musl: true }
           # Cross compiled from the ARM runner: macos-13 has been retired and
           # the replacement Intel labels are paid larger runners.
           - { host: macos-latest, target: x86_64-apple-darwin }
@@ -86,14 +82,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - name: Install the musl toolchain
-        if: matrix.musl
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-        working-directory: .
       - run: npm install
       - run: npx napi build --platform --release --target ${{ matrix.target }}
-        env:
-          CC: ${{ matrix.musl && 'musl-gcc' || '' }}
       # index.js and index.d.ts are emitted by the build, next to the binary,
       # and they are the package's entry point. The publish job does not build,
       # so it has to get them from here or the published package has a `main`
@@ -106,9 +96,64 @@ jobs:
             crates/inkling-node/index.js
             crates/inkling-node/index.d.ts
 
+  # musl is built inside Alpine rather than cross compiled from Ubuntu. Setting
+  # CC=musl-gcc only redirects the C compiler used for C dependencies; rustc
+  # keeps its own linker, so 0.2.1 shipped "musl" binaries that were linked
+  # against glibc and died on Alpine with:
+  #
+  #   Error loading shared library ld-linux-x86-64.so.2
+  #
+  # Inside the container musl is simply the native target, so there is no cross
+  # compilation to get wrong, and the check below proves it rather than assuming.
+  node-build-musl:
+    name: node addon ${{ matrix.target }}
+    needs: [verify, ci]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { host: ubuntu-latest, target: x86_64-unknown-linux-musl, interp: ld-musl-x86_64 }
+          - { host: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, interp: ld-musl-aarch64 }
+    runs-on: ${{ matrix.host }}
+    container: node:20-alpine
+    defaults:
+      run:
+        working-directory: crates/inkling-node
+    steps:
+      - name: Install a musl-native Rust toolchain
+        run: apk add --no-cache git build-base rust cargo
+        working-directory: /
+      - uses: actions/checkout@v4
+      - run: npm install
+      # A cdylib cannot be statically linked, and musl targets default to
+      # crt-static, so it has to be switched off for the addon to be loadable.
+      - run: npx napi build --platform --release --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: -C target-feature=-crt-static
+      - name: Prove the binary is really musl
+        run: |
+          binary=$(ls *.node)
+          echo "checking $binary"
+          if grep -aq 'ld-linux' "$binary"; then
+            echo "::error::$binary is linked against the glibc loader, not musl"
+            exit 1
+          fi
+          grep -aq '${{ matrix.interp }}' "$binary" || {
+            echo "::error::$binary does not reference the musl loader"
+            exit 1
+          }
+          echo "ok: musl-linked"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.target }}
+          path: |
+            crates/inkling-node/*.node
+            crates/inkling-node/index.js
+            crates/inkling-node/index.d.ts
+
   node-publish:
     name: assemble and publish node to npm
-    needs: node-build
+    needs: [node-build, node-build-musl]
     runs-on: ubuntu-latest
     permissions:
       id-token: write # npm trusted publishing (OIDC), once it is configured
@@ -207,7 +252,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # Everything above can pass while the published package does not work. It has,
-  # for three releases: the addon shipped with optionalDependencies naming
+  # for four releases now: the addon shipped with optionalDependencies naming
   # platform packages that were never created, so `npm install` succeeded and
   # `require()` threw. The only check that would have caught it is installing
   # the thing from the registry, on a machine that built none of it, and calling
@@ -216,7 +261,6 @@ jobs:
     name: install from npm and run it (${{ matrix.os }})
     needs: node-publish
     if: needs.node-publish.result == 'success' && github.event_name != 'pull_request'
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -255,7 +299,6 @@ jobs:
     name: install from npm and run it (alpine)
     needs: node-publish
     if: needs.node-publish.result == 'success' && github.event_name != 'pull_request'
-    continue-on-error: true
     runs-on: ubuntu-latest
     container: node:20-alpine
     steps:

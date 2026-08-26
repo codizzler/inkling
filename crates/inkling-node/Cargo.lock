@@ -76,7 +76,7 @@ dependencies = [
 
 [[package]]
 name = "inkling-loader"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "crossterm",
  "libc",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "inkling-node"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "inkling-loader",
  "napi",

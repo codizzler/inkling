@@ -6,6 +6,29 @@ All notable changes to Inkling are recorded here. The format follows
 repository (`inkling-loader`, `inkling-cli`, the Python, Node and WASM bindings) shares
 one version number and is released together.
 
+## [0.2.2] - 2026-08-26
+
+Repairs the musl builds of the Node addon. The engine is unchanged.
+
+### Fixed
+
+- **The Alpine binaries were not musl builds.** They were linked against the
+  glibc loader and failed to load with `Error loading shared library
+  ld-linux-x86-64.so.2`. `CC=musl-gcc` only redirects the C compiler used for C
+  dependencies; rustc keeps its own linker, so cross compiling to
+  `*-unknown-linux-musl` from Ubuntu produced glibc binaries with musl names.
+  They are now built inside an Alpine container, where musl is the native
+  target, with `-C target-feature=-crt-static` so a cdylib can actually be
+  loaded.
+
+### Infrastructure
+
+- The musl build asserts its own linkage, failing if the binary references the
+  glibc loader or does not reference the musl one.
+- The post-publish smoke jobs are no longer advisory. They caught this and were
+  ignored because they were set to `continue-on-error`, which let a release go
+  out green with a broken package in it.
+
 ## [0.2.1] - 2026-08-25
 
 Repairs the Node addon on npm. The engine is byte for byte the 0.2.0 release;
@@ -144,6 +167,7 @@ unchanged; almost everything wrapped around it moved.
 - Unicode display width for wide glyphs.
 - `inkling::prelude`.
 
+[0.2.2]: https://github.com/codizzler/inkling/releases/tag/v0.2.2
 [0.2.1]: https://github.com/codizzler/inkling/releases/tag/v0.2.1
 [0.2.0]: https://github.com/codizzler/inkling/releases/tag/v0.2.0
 [0.1.5]: https://github.com/codizzler/inkling/releases/tag/v0.1.5

@@ -260,7 +260,11 @@ jobs:
   smoke:
     name: install from npm and run it (${{ matrix.os }})
     needs: node-publish
-    if: needs.node-publish.result == 'success' && github.event_name != 'pull_request'
+    # Only after something was actually published. On a dry run there is
+    # nothing new on the registry, and these would test the previous
+    # release instead. Job-level `if` cannot read the env context, so the
+    # PUBLISH condition is spelled out again here.
+    if: needs.node-publish.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.publish)
     strategy:
       fail-fast: false
       matrix:
@@ -298,7 +302,11 @@ jobs:
   smoke-musl:
     name: install from npm and run it (alpine)
     needs: node-publish
-    if: needs.node-publish.result == 'success' && github.event_name != 'pull_request'
+    # Only after something was actually published. On a dry run there is
+    # nothing new on the registry, and these would test the previous
+    # release instead. Job-level `if` cannot read the env context, so the
+    # PUBLISH condition is spelled out again here.
+    if: needs.node-publish.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.publish)
     runs-on: ubuntu-latest
     container: node:20-alpine
     steps:
